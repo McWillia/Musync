@@ -2,6 +2,7 @@ import React, { Component } from "react";
 
 import Playlist from "./Playlist";
 import MutualPlaylists from "./MutualPlaylists";
+import GroupsTab from "./GroupsTab";
 
 
 interface IProps {
@@ -35,6 +36,19 @@ export default class App extends Component<IProps, IState> {
         }
         this.client.onmessage = (event) => {
             console.log("Message from server: " + event.data);
+            var response = JSON.parse(event.data);
+            switch(response.type){
+                case 'response_playlists':
+                    console.log(response.data)
+                    this.setState({
+                        playlists: JSON.stringify(response.data)
+                    })
+                    break;
+                case 'advertising_groups':
+
+                    break;
+                default:
+            }
         }
         this.client.onclose = (event) => {
             if (event.wasClean) {
@@ -58,6 +72,12 @@ export default class App extends Component<IProps, IState> {
                     client={this.client}
                     />
                 <MutualPlaylists
+                    code={this.code}
+                    client={this.client}
+                    />
+
+
+                <GroupsTab
                     code={this.code}
                     client={this.client}
                     />
