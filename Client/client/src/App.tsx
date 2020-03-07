@@ -43,6 +43,7 @@ export default class App extends Component<IProps, IState> {
         }
         this.client.onmessage = (event) => {
             console.log("Message from server: " + event.data);
+            console.log(event.data)
             var response = JSON.parse(event.data);
             switch(response.type){
                 case 'response_playlists':

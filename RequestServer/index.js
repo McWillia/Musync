@@ -142,9 +142,9 @@ server.on('connection', function connection(ws) {
                 Get group clients
                 Send clients to socket
                 */
-                if (!services.get('MutualPlaylist')) {
+                if (services.get('MutualPlaylist')) {
                     let tokens = groups.get(users.get(msg.code).groupID).clients.map((client)=>{
-                        return users.get(client).token;
+                        return users.get(client).token.access_token;
                     });
 
                     console.log(tokens);
@@ -227,7 +227,7 @@ microservices.on('connection', function connection(ws){
         switch (msg.type) {
             case 'new':
                 console.log(msg.microservice_type);
-                services.set(msg.microservice_type, ws)
+                services.set(msg.microservice_type, ws);
                 break;
             case 'result':
 
