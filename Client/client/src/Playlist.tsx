@@ -10,6 +10,10 @@ interface IState {
 
 }
 
+interface I{
+
+}
+
 export default class Playlist extends Component<IProps, IState> {
     constructor(props: IProps) {
         super(props)
@@ -23,27 +27,40 @@ export default class Playlist extends Component<IProps, IState> {
   }
 
   render(){
-    // let obj: (string[] | null);
-    // if(this.props.playlist_data !=null) {
-    //   var data = JSON.parse(this.props.playlist_data);
-    //
-    //   for(var i=0; i<data.length; i++){
-    //
-    //   }
-    //   obj = <div> content</div>
-    //
-    // } else {
-    //   obj = <div></div>;
-    // }
+    var obj = [];
+    if(this.props.playlist_data !=null) {
+
+      var data = JSON.parse(this.props.playlist_data);
+      var actual_data = JSON.parse(data.data);
+
+
+      if(actual_data){
+        console.log(actual_data.items);
+        for(var i = 0; i < actual_data.items.length && actual_data.items; i++){
+          obj.push(<div>{actual_data.items[i].name}<br /></div>);
+        }
+      }
+
+    } else{
+      obj.push(<div></div>)
+    }
 
     return(
 
       <div>
         <button onClick={this.sendRequest}  >test</button>
 
-
+        {obj}
 
       </div>
     )
   }
 }
+
+// function NewLines(obj:string[]){
+//   var newObj = obj;
+//   for(var i = 0; i < newObj.length; i++){
+//     newObj[i] = newObj[i] + '<br />';
+//     }
+//   return({newObj})
+// }
