@@ -26,7 +26,7 @@ export default class App extends Component<IProps, IState> {
           readyState: 0
         }
         this.code = props.location.search.slice(6);
-        this.client = new WebSocket("ws://localhost:8081");
+        this.client = new WebSocket("ws://138.251.29.21:8081");
     }
 
     componentDidMount() {
