@@ -68,7 +68,7 @@ export default class Playlist extends Component<IProps, IState> {
     return(
 
       <div>
-        <button onClick={this.sendRequest}  >test</button>
+        <button onClick={this.sendRequest}  >Show playlists</button>
 
         {obj}
 

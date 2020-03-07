@@ -3,11 +3,12 @@
 // extern crate serde;
 // extern crate serde_json;
 
-use ws::{connect, Handler, Sender, Handshake, Result, Message, CloseCode};
+use ws::{connect, Handler, Sender, Handshake, Result, Message, Error, ErrorKind, CloseCode};
 use rspotify::client::Spotify;
 use rspotify::senum::TimeRange;
-use rspotify::model::track::FullTrack;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+// use serde_json::Result;
 
 struct Client {
     connection: Sender,
@@ -27,7 +28,7 @@ struct InitMessage {
 
 #[derive(Serialize, Deserialize)]
 struct InstructMessage {
-    access_token: String,
+    access_tokens: Vec<String>,
 }
 
 impl Handler for Client {
@@ -63,8 +64,8 @@ impl Handler for Client {
                 panic!("Couldn't convert string to InstructMessage struct: {:?}", error);
             },
         };
-        println!("Got access token: {}", message.access_token);
-        getUserTopTracks(message.access_token.as_str());
+        println!("Got access token: {:?}", message.access_tokens);
+        createMutualPlaylist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect());
         return Ok(());
     }
 }
@@ -74,9 +75,29 @@ fn main() {
 }
 
 #[tokio::main]
-async fn getUserTopTracks(access_token: &str) -> Result<Vec<String>> {
+async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
+    let first_tracks = getUserTopTracks(String::from(access_tokens[0].as_str())).await;
+    let first_tracks = match first_tracks {
+        Ok(tracks) => tracks,
+        Err(error) => {
+            panic!("Couldn't get top tracks: {:?}", error);
+        },
+    };
+    println!("First Tracks: {:?}", first_tracks);
+    let second_tracks = getUserTopTracks(String::from(access_tokens[1].as_str())).await;
+    let second_tracks = match second_tracks {
+        Ok(tracks) => tracks,
+        Err(error) => {
+            panic!("Couldn't get top tracks: {:?}", error);
+        },
+    };
+    println!("Second Tracks: {:?}", second_tracks);
+    return Ok(());
+}
+
+async fn getUserTopTracks(access_token: String) -> Result<Vec<String>> {
     let spotify = Spotify::default()
-        .access_token(access_token)
+        .access_token(access_token.as_str())
         .build();
     let tracks = spotify
         .current_user_top_tracks(50, 0, TimeRange::MediumTerm)
@@ -87,7 +108,10 @@ async fn getUserTopTracks(access_token: &str) -> Result<Vec<String>> {
             return Ok(ids);
         },
         Err(error) => {
-            panic!("Couldn't get top tracks: {:?}", error);
+            return Err(Error {
+                kind: ErrorKind::Internal,
+                details: Cow::Owned(String::from(error.name().unwrap())),
+            });
         },
     };
 }
