@@ -21,13 +21,17 @@ export default class Playlist extends Component<IProps, IState> {
     }
   sendRequest(){
       var {client, code} = this.props;
-      // console.log(code);
 
     this.props.client.send(JSON.stringify({code: this.props.code, type: 'get_playlists'}));
   }
 
+  openPlaylist(song_name: string){
+    alert("You have opened" + song_name)
+  }
+
   render(){
     var obj = [];
+
     if(this.props.playlist_data !=null) {
 
       var data = JSON.parse(this.props.playlist_data);
@@ -36,8 +40,11 @@ export default class Playlist extends Component<IProps, IState> {
 
       if(actual_data){
         console.log(actual_data.items);
+        //obj = actual_data.items.map(())
+
         for(var i = 0; i < actual_data.items.length && actual_data.items; i++){
-          obj.push(<div>{actual_data.items[i].name}<br /></div>);
+
+          obj.push(<div>{actual_data.items[i].name} <button onClick={() => {this.openPlaylist(actual_data.items[2].name)}}>Open {actual_data.items[i].name}</button><br /></div>);
         }
       }
 
@@ -56,11 +63,3 @@ export default class Playlist extends Component<IProps, IState> {
     )
   }
 }
-
-// function NewLines(obj:string[]){
-//   var newObj = obj;
-//   for(var i = 0; i < newObj.length; i++){
-//     newObj[i] = newObj[i] + '<br />';
-//     }
-//   return({newObj})
-// }
