@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const WebSocket = require("ws");
 
 
 const app = express();
@@ -11,26 +12,20 @@ app.use(bodyParser.json()); // support json encoded bodies
 app.use(bodyParser.urlencoded({ extended: true })); // support encoded bodies
 app.options('*', cors());
 
-const my_client_id="f092792439d74b7e9341f90719b98365";
-const redirect_uri = "http://localhost:8080/home"
-
-// app.get('/login', function(req, res) {
-// var scopes = 'user-read-private user-read-email';
-// res.redirect('https://accounts.spotify.com/authorize' +
-//   '?response_type=code' +
-//   '&client_id=' + my_client_id +
-//   (scopes ? '&scope=' + encodeURIComponent(scopes) : '') +
-//   '&redirect_uri=' + encodeURIComponent(redirect_uri));
-// });
-
-// app.get('/callback', function(req, res){
-//     console.log(req);
-//     console.log(res);
-// })
-
 app.get('/test', function(req, res) {
     res.send(JSON.stringify({"hi":"there"}));
 })
+
+const server = new WebSocket.Server({ port: 8081 });
+
+server.on('connection', function connection(ws) {
+    console.log("Connection established");
+    console.log("Sending to server");
+    ws.on('message', function incoming(message) {
+        console.log("Message from client: " + message);
+    });
+})
+
 
 
 
