@@ -18,17 +18,6 @@ class App extends Component<IProps, IState> {
     }
   }
 
-  componentDidMount() {
-    fetch("http://localhost:8080", {
-      method: 'GET',
-      mode: 'cors',
-      headers:{
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin':'*'
-      },
-    })
-  }
-
   render(){
     const my_client_id="f092792439d74b7e9341f90719b98365";
     const redirect_uri = "http://localhost:3000/home";
