@@ -96,7 +96,10 @@ server.on('connection', function connection(ws) {
                 .then((data) =>{
                     console.log("Success: ");
                     console.log(data);
-                    ws.send(JSON.stringify(data));
+                    ws.send(JSON.stringify({
+                      'type' : 'response_playlists',
+                      'data' : data
+                    }));
                 })
                 .catch((error) =>{
                     console.log("Get errored:" + error);

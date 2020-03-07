@@ -7,7 +7,7 @@ interface IProps {
 }
 
 interface IState {
-
+  playlists: string | null
 }
 
 export default class App extends Component<IProps, IState> {
@@ -16,6 +16,9 @@ export default class App extends Component<IProps, IState> {
 
     constructor (props: IProps) {
         super(props);
+        this.state = {
+          playlists: null,
+        }
         this.code = props.location.search.slice(6);
         this.client = new WebSocket("ws://localhost:8081");
     }
@@ -33,6 +36,16 @@ export default class App extends Component<IProps, IState> {
         }
         this.client.onmessage = (event) => {
             console.log("Message from server: " + event.data);
+            var response = JSON.parse(event.data);
+            switch(response.type){
+              case 'response_playlists':
+              console.log(response.data)
+              this.setState({
+                playlists: JSON.stringify(response.data)
+              })
+                break;
+              default:
+            }
         }
         this.client.onclose = (event) => {
             if (event.wasClean) {
@@ -54,6 +67,7 @@ export default class App extends Component<IProps, IState> {
                 <Playlist
                     code={this.code}
                     client={this.client}
+                    playlist_data = {this.state.playlists}
                     />
             </div>
         )
