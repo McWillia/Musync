@@ -26,10 +26,13 @@ const baseAPI = 'https://api.spotify.com';
 const secrets = Buffer.from('f092792439d74b7e9341f90719b98365:3b2f3bf79fc14c10967dca3dc97aacaf').toString('base64');
 
 let users = new Map();
+let groups = new Map();
+let groupNumber = 0;
 
 server.on('connection', function connection(ws) {
     console.log("Connection established");
     let code;
+
     ws.on('message', function incoming(message) {
         var msg = JSON.parse(message);
 
@@ -75,14 +78,6 @@ server.on('connection', function connection(ws) {
 
             case 'get_playlists':
 
-            // console.log("---------------------------------------");
-            //     console.log(users.get(msg.code));
-            //     console.log("---------------------------------------");
-            //     console.log(users);
-            //     console.log("---------------------------------------");
-
-
-
                 fetch(baseAPI + '/v1/me/playlists',
                 {
                     method: 'GET',
@@ -97,8 +92,13 @@ server.on('connection', function connection(ws) {
                     console.log("Success: ");
                     console.log(data);
                     ws.send(JSON.stringify({
+<<<<<<< HEAD
                       'type' : 'response_playlists',
                       'data' : data
+=======
+                        'type':'response_playlists'
+                        'data': data
+>>>>>>> a869610888daa74af513a0be8c8b6dfde7f573b5
                     }));
                 })
                 .catch((error) =>{
@@ -106,6 +106,19 @@ server.on('connection', function connection(ws) {
                 });
 
 
+                break;
+
+            case 'make_mutual_playlist':
+                /*
+                Get a mutual playlist socket
+                Get group clients
+                Send clients to socket
+                */
+                if (microservices.get('MutualPlaylists')) {
+                    microservices.get('MutualPlaylists').send(JSON.stringify({
+                        access_token: msg.token.access_token
+                    }))
+                }
                 break;
             default:
                 console.log("Unknown message type");
@@ -120,22 +133,29 @@ server.on('connection', function connection(ws) {
     })
 })
 
-//
-// const microservices = new WebSocket.Server({port:8082});
-//
-// microservices.on('connection', function connection(ws){
-//     ws.on('message', function incoming(message) {
-//         var msg = JSON.parse(message);
-//
-//         switch (msg.type) {
-//             case :
-//
-//                 break;
-//             default:
-//
-//         }
-//     })
-// })
+
+const microservices = new WebSocket.Server({port:8082});
+
+var services = new Map();
+var serviceNumber = 0;
+
+microservices.on('connection', function connection(ws){
+    ws.on('message', function incoming(message) {
+        var msg = JSON.parse(message);
+
+        switch (msg.type) {
+            case 'new':
+                msg.microservice_type
+                services.set(msg.microservice_type, ws)
+                break;
+            case 'result':
+
+                break;
+            default:
+
+        }
+    })
+})
 
 
 
