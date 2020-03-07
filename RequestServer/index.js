@@ -142,10 +142,15 @@ server.on('connection', function connection(ws) {
                 Get group clients
                 Send clients to socket
                 */
-                if (services.get('MutualPlaylist')) {
-                    let access_token = users.get(msg.code).token.access_token;
+                if (!services.get('MutualPlaylist')) {
+                    let tokens = groups.get(users.get(msg.code).groupID).clients.map((client)=>{
+                        return users.get(client).token;
+                    });
+
+                    console.log(tokens);
+
                     services.get('MutualPlaylist').send(JSON.stringify({
-                        access_token: access_token
+                        tokens: tokens
                     }))
                 }
                 break;
