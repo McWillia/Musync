@@ -1,7 +1,18 @@
-import React from "react";
+import React, { Component } from "react";
 
-export default class App extends React.Component {
-    constructor (props) {
+interface IProps {
+    location: Location
+}
+
+interface IState {
+    
+}
+
+export default class App extends Component<IProps, IState> {
+    private code: string;
+    private client: WebSocket;
+
+    constructor (props: IProps) {
         super(props);
         this.code = props.location.search.slice(6);
         this.client = new WebSocket("ws://localhost:8081");
@@ -23,13 +34,12 @@ export default class App extends React.Component {
                 console.log("Connection died");
             }
         }
-        this.client.onerror = (error) => {
-            console.log("Error: " + error.message);
+        this.client.onerror = (error: Event) => {
+            console.log("Error: " + error.returnValue);
         }
     }
 
     render() {
-        
         return(
             <h1>{this.code}</h1>
         )
