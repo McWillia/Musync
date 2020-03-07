@@ -150,7 +150,7 @@ server.on('connection', function connection(ws) {
                     console.log(tokens);
 
                     services.get('MutualPlaylist').send(JSON.stringify({
-                        tokens: tokens
+                        access_tokens: tokens
                     }))
                 }
                 break;
