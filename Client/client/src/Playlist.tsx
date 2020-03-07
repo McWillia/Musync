@@ -1,6 +1,7 @@
 import React, { Component } from "react";
 
 interface IProps {
+    playlist_data: string | null,
     code: string,
     client: WebSocket
 }
@@ -22,8 +23,27 @@ export default class Playlist extends Component<IProps, IState> {
   }
 
   render(){
+    var obj;
+    if(this.props.playlist_data !=null) {
+      var data = JSON.parse(this.props.playlist_data);
+
+      for(int i=0; i<data.length; i++){
+
+      }
+      obj = <div> content</div>
+
+    } else {
+      obj = <div></div>;
+    }
+
     return(
-      <button onClick={this.sendRequest}  >test</button>
+
+      <div>
+        <button onClick={this.sendRequest}  >test</button>
+
+          {obj}
+
+      </div>
     )
   }
 }

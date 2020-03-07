@@ -107,6 +107,7 @@ server.on('connection', function connection(ws) {
                     ws.send(JSON.stringify({
                         'type':'response_playlists',
                         'data': data
+>>>>>>> a869610888daa74af513a0be8c8b6dfde7f573b5
                     }));
                 })
                 .catch((error) =>{
