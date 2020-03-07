@@ -96,12 +96,13 @@ server.on('connection', function connection(ws) {
                 .then((data) =>{
                     console.log("Success: ");
                     console.log(data);
+                    ws.send(JSON.stringify(data));
                 })
                 .catch((error) =>{
                     console.log("Get errored:" + error);
                 });
 
-                
+
                 break;
             default:
                 console.log("Unknown message type");
