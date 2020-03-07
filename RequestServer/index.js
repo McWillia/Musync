@@ -3,7 +3,11 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const WebSocket = require("ws");
 const fetch = require('node-fetch');
+const os = require('os');
 
+const networkInterfaces = os.networkInterfaces();
+const host = networkInterfaces.enp3s0[0].address;
+console.log(host);
 
 const app = express();
 const http_port = 8080;
@@ -18,6 +22,7 @@ app.get('/test', function(req, res) {
 })
 
 const server = new WebSocket.Server({ port: 8081 });
+const microservices = new WebSocket.Server({port:8082});
 
 const redirectUri = "http://localhost:3000/home";
 const baseAPI = 'https://api.spotify.com';
@@ -27,11 +32,22 @@ const secrets = Buffer.from('f092792439d74b7e9341f90719b98365:3b2f3bf79fc14c1096
 
 let users = new Map();
 let groups = new Map();
+let services = new Map();
 let groupNumber = 0;
+
 
 server.on('connection', function connection(ws) {
     console.log("Connection established");
     let code;
+
+    function updateGroups (){
+        for (user of users.values()) {
+            user.ws.send(JSON.stringify({
+                'type': 'advertising_groups',
+                'data': [...groups.values()]
+            }));
+        }
+    }
 
     ws.on('message', function incoming(message) {
         var msg = JSON.parse(message);
@@ -65,11 +81,26 @@ server.on('connection', function connection(ws) {
                     console.log("Success: ");
                     console.log(data);
 
+                    //Add user to new group and place in user map
                     users.set(msg.code, {
-                        'groupID': 0,
+                        'groupID': groupNumber,
                         'token': data,
                         'ws':ws
                     })
+                    var clientArray = [];
+                    clientArray.push(msg.code);
+                    //Make new group with only new client
+                    groups.set(groupNumber, {
+                        'advert': false,
+                        'id': groupNumber,
+                        'clients':clientArray
+                    })
+
+                    updateGroups()
+
+                    console.log(groups)
+
+                    groupNumber++;
                 })
                 .catch((error) =>{
                     console.log("Get errored:" + error);
@@ -116,6 +147,12 @@ server.on('connection', function connection(ws) {
                     }))
                 }
                 break;
+
+            // case 'get_advertising_groups':
+            //     console.log("ADDDDD");
+            //     console.log([...groups.values()]);
+            //
+            //     break;
             default:
                 console.log("Unknown message type");
         }
@@ -130,10 +167,6 @@ server.on('connection', function connection(ws) {
 })
 
 
-const microservices = new WebSocket.Server({port:8082});
-
-var services = new Map();
-var serviceNumber = 0;
 
 microservices.on('connection', function connection(ws){
     ws.on('message', function incoming(message) {
