@@ -1,6 +1,8 @@
 import React, { Component } from "react";
 
 import Playlist from "./Playlist";
+import MutualPlaylists from "./MutualPlaylists";
+
 
 interface IProps {
     location: Location
@@ -55,6 +57,11 @@ export default class App extends Component<IProps, IState> {
                     code={this.code}
                     client={this.client}
                     />
+                <MutualPlaylists
+                    code={this.code}
+                    client={this.client}
+                    />
+
             </div>
         )
     }
