@@ -5,7 +5,7 @@ interface IProps {
 }
 
 interface IState {
-    
+
 }
 
 export default class App extends Component<IProps, IState> {
@@ -22,7 +22,12 @@ export default class App extends Component<IProps, IState> {
         this.client.onopen = () => {
             console.log("Connection established");
             console.log("Sending to server");
-            this.client.send(this.code);
+
+            let authCodeMessage = {
+                'type':'authCode',
+                'code':this.code
+            }
+            this.client.send(JSON.stringify(authCodeMessage));
         }
         this.client.onmessage = (event) => {
             console.log("Message from server: " + event.data);
@@ -42,6 +47,8 @@ export default class App extends Component<IProps, IState> {
     render() {
         return(
             <h1>{this.code}</h1>
+
+
         )
     }
 }
