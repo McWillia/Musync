@@ -1,7 +1,7 @@
 import React, { Component } from "react";
 
 interface IProps {
-    playlist_data: string | null,
+    playlist_data?: string,
     code: string,
     client: WebSocket
 }
@@ -34,18 +34,32 @@ export default class Playlist extends Component<IProps, IState> {
 
     if(this.props.playlist_data !=null) {
 
-      var data = JSON.parse(this.props.playlist_data);
-      var actual_data = JSON.parse(data.data);
+      var data = this.props.playlist_data;
+      console.log("HERERERERE")
+      console.log(data);
+      if (data) {
 
+          var actual_data = JSON.parse(data);
+          console.log(actual_data);
+          //
+          //
+          if(actual_data){
+              console.log(actual_data.items);
 
-      if(actual_data){
-        console.log(actual_data.items);
-        //obj = actual_data.items.map(())
+              obj = actual_data.items.map((playlist: any) => {
+                return(
+                  <div>
+                    {playlist.name}
+                    <button onClick={() => {this.openPlaylist(playlist.name)}}>Open {playlist.name}</button>
+                    <br />
+                  </div>
+                )
+              })
 
-        for(var i = 0; i < actual_data.items.length && actual_data.items; i++){
-
-          obj.push(<div>{actual_data.items[i].name} <button onClick={() => {this.openPlaylist(actual_data.items[2].name)}}>Open {actual_data.items[i].name}</button><br /></div>);
-        }
+              // for(var i = 0; i < actual_data.items.length && actual_data.items; i++){
+              //       obj.push(<div>{actual_data.items[i].name} <button onClick={() => {this.openPlaylist(actual_data.items[i].name)}}>Open {actual_data.items[i].name}</button><br /></div>);
+              //     }
+              }
       }
 
     } else{
