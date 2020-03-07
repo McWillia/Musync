@@ -35,7 +35,7 @@ class App extends Component<IProps, IState> {
           '&client_id=' + my_client_id +
           (scopes ? '&scope=' + encodeURIComponent(scopes.join(" ")) : '') +
           '&redirect_uri=' + encodeURIComponent(redirect_uri)}>
-            Textual
+            Hello! Welcome to MuSinkc
           </a>
         </header>
       </div>

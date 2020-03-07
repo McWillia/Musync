@@ -74,7 +74,7 @@ export default class App extends Component<IProps, IState> {
 
       return(
           <div>
-              <h1>{this.code}</h1>
+              
 
               <Playlist
                   playlist_data={this.state.playlist_data}
