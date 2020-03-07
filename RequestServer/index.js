@@ -3,7 +3,11 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const WebSocket = require("ws");
 const fetch = require('node-fetch');
+const os = require('os');
 
+const networkInterfaces = os.networkInterfaces();
+const host = networkInterfaces.enp3s0[0].address;
+console.log(host);
 
 const app = express();
 const http_port = 8080;
@@ -35,6 +39,15 @@ let groupNumber = 0;
 server.on('connection', function connection(ws) {
     console.log("Connection established");
     let code;
+
+    function updateGroups (){
+        for (user of users.values()) {
+            user.ws.send(JSON.stringify({
+                'type': 'advertising_groups',
+                'data': [...groups.values()]
+            }));
+        }
+    }
 
     ws.on('message', function incoming(message) {
         var msg = JSON.parse(message);
@@ -79,8 +92,13 @@ server.on('connection', function connection(ws) {
                     //Make new group with only new client
                     groups.set(groupNumber, {
                         'advert': false,
+                        'id': groupNumber,
                         'clients':clientArray
                     })
+
+                    updateGroups()
+
+                    console.log(groups)
 
                     groupNumber++;
                 })
@@ -107,7 +125,6 @@ server.on('connection', function connection(ws) {
                     ws.send(JSON.stringify({
                         'type':'response_playlists',
                         'data': data
->>>>>>> a869610888daa74af513a0be8c8b6dfde7f573b5
                     }));
                 })
                 .catch((error) =>{
@@ -130,12 +147,11 @@ server.on('connection', function connection(ws) {
                 }
                 break;
 
-            case 'get_advertising_groups':
-                ws.send(JSON.stringify({
-                    'type': 'advertising_groups',
-                    'data': [...groups.values()]
-                }))
-                break;
+            // case 'get_advertising_groups':
+            //     console.log("ADDDDD");
+            //     console.log([...groups.values()]);
+            //
+            //     break;
             default:
                 console.log("Unknown message type");
         }

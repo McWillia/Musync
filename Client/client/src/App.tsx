@@ -11,7 +11,8 @@ interface IProps {
 
 interface IState {
   playlist_data: string | null,
-  group_data: string | null
+  group_data: string | null,
+  readyState: number
 }
 
 export default class App extends Component<IProps, IState> {
@@ -22,7 +23,8 @@ export default class App extends Component<IProps, IState> {
         super(props);
         this.state = {
           playlist_data: null,
-          group_data: null
+          group_data: null,
+          readyState: 0
         }
         this.code = props.location.search.slice(6);
         this.client = new WebSocket("ws://localhost:8081");
@@ -38,6 +40,7 @@ export default class App extends Component<IProps, IState> {
                 'code':this.code
             }
             this.client.send(JSON.stringify(authCodeMessage));
+            this.setState({readyState:this.client.readyState});
         }
         this.client.onmessage = (event) => {
             console.log("Message from server: " + event.data);
@@ -50,7 +53,9 @@ export default class App extends Component<IProps, IState> {
                     })
                     break;
                 case 'advertising_groups':
-
+                console.log("HEHEHEHEHEHEHEHRERERERERERER")
+                    console.log(response.data)
+                    this.setState({group_data:response.data})
                     break;
                 default:
             }
@@ -68,7 +73,7 @@ export default class App extends Component<IProps, IState> {
     }
 
     render() {
-  
+
       return(
           <div>
               <h1>{this.code}</h1>
@@ -78,17 +83,24 @@ export default class App extends Component<IProps, IState> {
                   code={this.code}
                   client={this.client}
                   />
+
+
               <MutualPlaylists
                   code={this.code}
                   client={this.client}
                   />
 
 
-              <GroupsTab
-                  groups={JSON.stringify({'data': this.state.group_data})}
-                  code={this.code}
-                  client={this.client}
-                  />
+              {
+                  this.state.readyState==1 ?
+                  <GroupsTab
+                      groups={JSON.stringify({'data': this.state.group_data})}
+                      code={this.code}
+                      client={this.client}
+                      />
+                      :
+                  <div></div>
+              }
 
           </div>
       )
