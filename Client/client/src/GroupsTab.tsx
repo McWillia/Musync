@@ -18,13 +18,23 @@ export default class GroupTab extends Component<IProps, IState> {
     componentDidMount() {
         let {code, client} = this.props;
 
+        console.log(client.readyState)
+        client.send(JSON.stringify({
+            'type': 'get_advertising_groups'
+        }))
+
 
     }
 
     render(){
+        let {code, client, groups} = this.props;
+
+
+        console.log(groups)
+
         return(
             <div className='groupTab'>
-
+                {groups}
             </div>
         )
     }
