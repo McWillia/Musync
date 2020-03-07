@@ -11,7 +11,8 @@ interface IState {
 
 export default class MutualPlaylists extends Component<IProps, IState> {
     constructor(props: IProps) {
-
+      super(props);
+      this.sendRequest = this.sendRequest.bind(this);
     }
   sendRequest(){
       var {client, code} = this.props;

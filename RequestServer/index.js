@@ -92,7 +92,7 @@ server.on('connection', function connection(ws) {
                     console.log("Success: ");
                     console.log(data);
                     ws.send(JSON.stringify({
-                        'type':'response_playlists'
+                        'type':'response_playlists',
                         'data': data
                     }));
                 })
@@ -109,9 +109,10 @@ server.on('connection', function connection(ws) {
                 Get group clients
                 Send clients to socket
                 */
-                if (microservices.get('MutualPlaylists')) {
-                    microservices.get('MutualPlaylists').send(JSON.stringify({
-                        access_token: msg.token.access_token
+                if (services.get('MutualPlaylist')) {
+                    let access_token = users.get(msg.code).token.access_token;
+                    services.get('MutualPlaylist').send(JSON.stringify({
+                        access_token: access_token
                     }))
                 }
                 break;
@@ -140,7 +141,7 @@ microservices.on('connection', function connection(ws){
 
         switch (msg.type) {
             case 'new':
-                msg.microservice_type
+                console.log(msg.microservice_type);
                 services.set(msg.microservice_type, ws)
                 break;
             case 'result':
