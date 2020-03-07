@@ -23,25 +23,25 @@ export default class Playlist extends Component<IProps, IState> {
   }
 
   render(){
-    var obj;
-    if(this.props.playlist_data !=null) {
-      var data = JSON.parse(this.props.playlist_data);
-
-      for(int i=0; i<data.length; i++){
-
-      }
-      obj = <div> content</div>
-
-    } else {
-      obj = <div></div>;
-    }
+    // let obj: (string[] | null);
+    // if(this.props.playlist_data !=null) {
+    //   var data = JSON.parse(this.props.playlist_data);
+    //
+    //   for(var i=0; i<data.length; i++){
+    //
+    //   }
+    //   obj = <div> content</div>
+    //
+    // } else {
+    //   obj = <div></div>;
+    // }
 
     return(
 
       <div>
         <button onClick={this.sendRequest}  >test</button>
 
-          {obj}
+
 
       </div>
     )

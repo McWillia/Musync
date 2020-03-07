@@ -10,7 +10,8 @@ interface IProps {
 }
 
 interface IState {
-
+  playlist_data: string | null,
+  group_data: string | null
 }
 
 export default class App extends Component<IProps, IState> {
@@ -19,6 +20,10 @@ export default class App extends Component<IProps, IState> {
 
     constructor (props: IProps) {
         super(props);
+        this.state = {
+          playlist_data: null,
+          group_data: null
+        }
         this.code = props.location.search.slice(6);
         this.client = new WebSocket("ws://localhost:8081");
     }
@@ -41,7 +46,7 @@ export default class App extends Component<IProps, IState> {
                 case 'response_playlists':
                     console.log(response.data)
                     this.setState({
-                        playlists: JSON.stringify(response.data)
+                        playlist_data: JSON.stringify(response.data)
                     })
                     break;
                 case 'advertising_groups':
@@ -63,26 +68,29 @@ export default class App extends Component<IProps, IState> {
     }
 
     render() {
-        return(
-            <div>
-                <h1>{this.code}</h1>
+  
+      return(
+          <div>
+              <h1>{this.code}</h1>
 
-                <Playlist
-                    code={this.code}
-                    client={this.client}
-                    />
-                <MutualPlaylists
-                    code={this.code}
-                    client={this.client}
-                    />
+              <Playlist
+                  playlist_data={JSON.stringify({'data': this.state.playlist_data})}
+                  code={this.code}
+                  client={this.client}
+                  />
+              <MutualPlaylists
+                  code={this.code}
+                  client={this.client}
+                  />
 
 
-                <GroupsTab
-                    code={this.code}
-                    client={this.client}
-                    />
+              <GroupsTab
+                  groups={JSON.stringify({'data': this.state.group_data})}
+                  code={this.code}
+                  client={this.client}
+                  />
 
-            </div>
-        )
+          </div>
+      )
     }
 }
