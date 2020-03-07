@@ -1,7 +1,7 @@
 import React, { Component } from "react";
 
 interface IProps {
-    playlist_data: string | null,
+    playlist_data?: string,
     code: string,
     client: WebSocket
 }
@@ -30,15 +30,21 @@ export default class Playlist extends Component<IProps, IState> {
     var obj = [];
     if(this.props.playlist_data !=null) {
 
-      var data = JSON.parse(this.props.playlist_data);
-      var actual_data = JSON.parse(data.data);
+      var data = this.props.playlist_data;
+      console.log("HERERERERE")
+      console.log(data);
+      if (data) {
 
-
-      if(actual_data){
-        console.log(actual_data.items);
-        for(var i = 0; i < actual_data.items.length && actual_data.items; i++){
-          obj.push(<div>{actual_data.items[i].name}<br /></div>);
-        }
+          var actual_data = JSON.parse(data);
+          console.log(actual_data);
+          //
+          //
+          if(actual_data){
+              console.log(actual_data.items);
+              for(var i = 0; i < actual_data.items.length && actual_data.items; i++){
+                    obj.push(<div>{actual_data.items[i].name}<br /></div>);
+                  }
+              }
       }
 
     } else{

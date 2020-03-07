@@ -77,7 +77,7 @@ export default class App extends Component<IProps, IState> {
               <h1>{this.code}</h1>
 
               <Playlist
-                  playlist_data={JSON.stringify({'data': this.state.playlist_data})}
+                  playlist_data={this.state.playlist_data}
                   code={this.code}
                   client={this.client}
                   />
