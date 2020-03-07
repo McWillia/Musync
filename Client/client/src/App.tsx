@@ -52,7 +52,7 @@ export default class App extends Component<IProps, IState> {
                     })
                     break;
                 case 'advertising_groups':
-                    console.log(response.data)
+                    // console.log(response.data)
                     this.setState({group_data:response.data})
                     break;
                 default:
@@ -71,36 +71,31 @@ export default class App extends Component<IProps, IState> {
     }
 
     render() {
-
-      return(
-          <div>
-              
-
-              <Playlist
-                  playlist_data={this.state.playlist_data}
-                  code={this.code}
-                  client={this.client}
-                  />
+        if(this.state.readyState == 1){
+            return(
+                <div>
+                    <Playlist
+                        playlist_data={this.state.playlist_data}
+                        code={this.code}
+                        client={this.client}
+                        />
 
 
-              <MutualPlaylists
-                  code={this.code}
-                  client={this.client}
-                  />
+                    <MutualPlaylists
+                        code={this.code}
+                        client={this.client}
+                        />
 
+                    <GroupsTab
+                        groups={this.state.group_data}
+                        code={this.code}
+                        client={this.client}
+                        />
+                </div>
+            )
+        } else {
+            return <h1>{this.code}</h1>;
 
-              {
-                  this.state.readyState==1 ?
-                  <GroupsTab
-                      groups={this.state.group_data}
-                      code={this.code}
-                      client={this.client}
-                      />
-                      :
-                  <div></div>
-              }
-
-          </div>
-      )
+        }
     }
 }
