@@ -96,6 +96,8 @@ server.on('connection', function connection(ws) {
                         'clients':clientArray
                     })
 
+                    code = msg.code;
+
                     updateGroups()
 
                     console.log(groups)
@@ -153,15 +155,60 @@ server.on('connection', function connection(ws) {
             //     console.log([...groups.values()]);
             //
             //     break;
+            case 'join_group':
+                // msg.id
+                // msg.code
+
+                if (groups.get(msg.id)) {
+                    //Get the old group
+                    let group = groups.get(users.get(msg.code).groupID);
+                    //remove from old group
+                    group.clients = group.clients.filter((client) => client != code)
+                    //Check if group is empty
+                    if (group.clients.length === 0) {
+                        console.log("Removing group" + users.get(code).groupID);
+                        groups.delete(users.get(code).groupID)
+                    }
+
+                    //Update the map
+                    users.get(msg.code).groupID = msg.id;
+                    //Add to new group
+                    groups.get(msg.id).clients.push(msg.code);
+
+
+                    updateGroups();
+                }
+                break;
             default:
                 console.log("Unknown message type");
         }
 
     });
 
-    ws.on('close', function closing(code, reason){
+    ws.on('close', function closing(code_error, reason){
+        console.log("CLOSING");
+        console.log(code);
         if (code) {
+            console.log("-------------------");
+            console.log(users.get(code));
+            console.log("-------------------");
+            console.log(users)
+            console.log("-------------------");
+            console.log(code);
+            console.log("-------------------");
+            let group = groups.get(users.get(code).groupID);
+
+            group.clients = group.clients.filter((client) => client != code)
+
+            if (group.clients.length === 0) {
+                console.log("Here");
+                groups.delete(users.get(code).groupID)
+            }
+
             users.delete(code);
+
+            updateGroups();
+
         }
     })
 })
