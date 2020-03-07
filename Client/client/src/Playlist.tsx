@@ -35,16 +35,15 @@ export default class Playlist extends Component<IProps, IState> {
     if(this.props.playlist_data !=null) {
 
       var data = this.props.playlist_data;
-      console.log("HERERERERE")
-      console.log(data);
+      // console.log(data);
       if (data) {
 
           var actual_data = JSON.parse(data);
-          console.log(actual_data);
+          // console.log(actual_data);
           //
           //
           if(actual_data){
-              console.log(actual_data.items);
+              // console.log(actual_data.items);
 
               obj = actual_data.items.map((playlist: any) => {
                 return(
