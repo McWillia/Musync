@@ -1,5 +1,7 @@
 import React, { Component } from "react";
 
+import Playlist from "./Playlist";
+
 interface IProps {
     location: Location
 }
@@ -46,9 +48,14 @@ export default class App extends Component<IProps, IState> {
 
     render() {
         return(
-            <h1>{this.code}</h1>
+            <div>
+                <h1>{this.code}</h1>
 
-
+                <Playlist
+                    code={this.code}
+                    client={this.client}
+                    />
+            </div>
         )
     }
 }

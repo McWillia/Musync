@@ -20,6 +20,8 @@ app.get('/test', function(req, res) {
 const server = new WebSocket.Server({ port: 8081 });
 
 const redirectUri = "http://localhost:3000/home";
+const baseAPI = 'https://api.spotify.com';
+
 
 const secrets = Buffer.from('f092792439d74b7e9341f90719b98365:3b2f3bf79fc14c10967dca3dc97aacaf').toString('base64');
 
@@ -32,7 +34,7 @@ server.on('connection', function connection(ws) {
         var msg = JSON.parse(message);
 
         console.log("Message from client: " + msg);
-        console.log(msg);
+        // console.log(msg);
 
         switch (msg.type) {
             case 'authCode':
@@ -70,6 +72,37 @@ server.on('connection', function connection(ws) {
                     console.log("Get errored:" + error);
                 });
                 break;
+
+            case 'get_playlists':
+
+            // console.log("---------------------------------------");
+            //     console.log(users.get(msg.code));
+            //     console.log("---------------------------------------");
+            //     console.log(users);
+            //     console.log("---------------------------------------");
+
+
+
+                fetch(baseAPI + '/v1/me/playlists',
+                {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + users.get(msg.code).token.access_token
+                    },
+
+                })
+                // .then(this.handleErrors)
+                .then((response) => response.json())
+                .then((data) =>{
+                    console.log("Success: ");
+                    console.log(data);
+                })
+                .catch((error) =>{
+                    console.log("Get errored:" + error);
+                });
+
+                
+                break;
             default:
                 console.log("Unknown message type");
         }
@@ -83,8 +116,22 @@ server.on('connection', function connection(ws) {
     })
 })
 
-
-
+//
+// const microservices = new WebSocket.Server({port:8082});
+//
+// microservices.on('connection', function connection(ws){
+//     ws.on('message', function incoming(message) {
+//         var msg = JSON.parse(message);
+//
+//         switch (msg.type) {
+//             case :
+//
+//                 break;
+//             default:
+//
+//         }
+//     })
+// })
 
 
 

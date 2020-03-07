@@ -24,6 +24,7 @@ class App extends Component<IProps, IState> {
     const scopes = [
       "user-read-currently-playing",
       "user-read-playback-state",
+      "playlist-read-private"
     ];
     return (
       <div className="App">
