@@ -12,23 +12,21 @@ app.use(bodyParser.urlencoded({ extended: true })); // support encoded bodies
 app.options('*', cors());
 
 const my_client_id="f092792439d74b7e9341f90719b98365";
-const redirect_uri = "http://localhost:8080/callback"
+const redirect_uri = "http://localhost:8080/home"
 
-app.get('/login', function(req, res) {
-var scopes = 'user-read-private user-read-email';
-res.redirect('https://accounts.spotify.com/authorize' +
-  '?response_type=code' +
-  '&client_id=' + my_client_id +
-  (scopes ? '&scope=' + encodeURIComponent(scopes) : '') +
-  '&redirect_uri=' + encodeURIComponent(redirect_uri));
-});
+// app.get('/login', function(req, res) {
+// var scopes = 'user-read-private user-read-email';
+// res.redirect('https://accounts.spotify.com/authorize' +
+//   '?response_type=code' +
+//   '&client_id=' + my_client_id +
+//   (scopes ? '&scope=' + encodeURIComponent(scopes) : '') +
+//   '&redirect_uri=' + encodeURIComponent(redirect_uri));
+// });
 
-
-
-app.get('/callback', function(req, res){
-    console.log(req);
-    console.log(res);
-})
+// app.get('/callback', function(req, res){
+//     console.log(req);
+//     console.log(res);
+// })
 
 app.get('/test', function(req, res) {
     res.send(JSON.stringify({"hi":"there"}));
