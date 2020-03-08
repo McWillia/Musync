@@ -3,6 +3,7 @@ import React, { Component } from "react";
 import Playlist from "./Playlist";
 import MutualPlaylists from "./MutualPlaylists";
 import GroupsTab, { IGroup } from "./GroupsTab";
+import Player from "./Player";
 
 
 interface IProps {
@@ -92,6 +93,12 @@ export default class App extends Component<IProps, IState> {
                         code={this.code}
                         client={this.client}
                         />
+
+                    <Player
+                        code={this.code}
+                        client={this.client}
+                        />
+
                 </div>
             )
         } else {

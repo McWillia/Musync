@@ -25,7 +25,8 @@ class App extends Component<IProps, IState> {
       "user-read-currently-playing",
       "user-read-playback-state",
       "playlist-read-private",
-      "user-top-read"
+      "user-top-read",
+      "user-modify-playback-state"
     ];
     return (
       <div className="App">

@@ -10,24 +10,19 @@ interface IState {
 
 }
 
-interface I{
-
-}
-
 export default class Playlist extends Component<IProps, IState> {
     constructor(props: IProps) {
         super(props)
         this.sendRequest = this.sendRequest.bind(this);
     }
-  sendRequest(){
-      var {client, code} = this.props;
+    sendRequest(){
+        var {client, code} = this.props;
+        this.props.client.send(JSON.stringify({code: this.props.code, type: 'get_playlists'}));
+    }
 
-    this.props.client.send(JSON.stringify({code: this.props.code, type: 'get_playlists'}));
-  }
-
-  openPlaylist(song_name: string){
-    alert("You have opened" + song_name)
-  }
+    openPlaylist(song_name: string){
+        alert("You have opened" + song_name)
+    }
 
   render(){
     var obj = [];
@@ -68,7 +63,7 @@ export default class Playlist extends Component<IProps, IState> {
     return(
 
       <div>
-        <button onClick={this.sendRequest}  >Show playlists</button>
+        <button onClick={this.sendRequest}  >Update Playlists</button>
 
         {obj}
 
