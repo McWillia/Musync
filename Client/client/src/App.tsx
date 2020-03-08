@@ -3,6 +3,7 @@ import React, { Component } from "react";
 import Playlist from "./Playlist";
 import MutualPlaylists from "./MutualPlaylists";
 import GroupsTab, { IGroup } from "./GroupsTab";
+import Player from "./Player";
 
 
 interface IProps {
@@ -43,6 +44,7 @@ export default class App extends Component<IProps, IState> {
         }
         this.client.onmessage = (event) => {
             console.log("Message from server: " + event.data);
+            console.log(event.data)
             var response = JSON.parse(event.data);
             switch(response.type){
                 case 'response_playlists':
@@ -91,6 +93,12 @@ export default class App extends Component<IProps, IState> {
                         code={this.code}
                         client={this.client}
                         />
+
+                    <Player
+                        code={this.code}
+                        client={this.client}
+                        />
+
                 </div>
             )
         } else {

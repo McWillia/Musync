@@ -25,7 +25,8 @@ class App extends Component<IProps, IState> {
       "user-read-currently-playing",
       "user-read-playback-state",
       "playlist-read-private",
-      "user-top-read"
+      "user-top-read",
+      "user-modify-playback-state"
     ];
     return (
       <div className="App">
@@ -35,7 +36,7 @@ class App extends Component<IProps, IState> {
           '&client_id=' + my_client_id +
           (scopes ? '&scope=' + encodeURIComponent(scopes.join(" ")) : '') +
           '&redirect_uri=' + encodeURIComponent(redirect_uri)}>
-            Textual
+            Hello! Welcome to MuSinkc
           </a>
         </header>
       </div>

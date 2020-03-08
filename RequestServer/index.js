@@ -17,10 +17,6 @@ app.use(bodyParser.json()); // support json encoded bodies
 app.use(bodyParser.urlencoded({ extended: true })); // support encoded bodies
 app.options('*', cors());
 
-app.get('/test', function(req, res) {
-    res.send(JSON.stringify({"hi":"there"}));
-})
-
 const server = new WebSocket.Server({ port: 8081 });
 const microservices = new WebSocket.Server({port:8082});
 
@@ -49,11 +45,17 @@ server.on('connection', function connection(ws) {
         }
     }
 
+    function getTokensInGroup(groupID) {
+        return groups.get(groupID).clients.map((client)=>{
+            return users.get(client).token.access_token;
+        });
+    }
+
     ws.on('message', function incoming(message) {
         var msg = JSON.parse(message);
 
         console.log("Message from client: " + msg);
-        // console.log(msg);
+        console.log(msg);
 
         switch (msg.type) {
             case 'authCode':
@@ -142,24 +144,19 @@ server.on('connection', function connection(ws) {
                 Get group clients
                 Send clients to socket
                 */
-                if (!services.get('MutualPlaylist')) {
-                    let tokens = groups.get(users.get(msg.code).groupID).clients.map((client)=>{
-                        return users.get(client).token;
-                    });
+                if (services.get('MutualPlaylist')) {
+                    let tokens = getTokensInGroup(users.get(msg.code).groupID);
 
                     console.log(tokens);
 
-                    services.get('MutualPlaylist').send(JSON.stringify({
-                        access_tokens: tokens
-                    }))
+                    if (tokens.length > 1) {
+                        services.get('MutualPlaylist').send(JSON.stringify({
+                            access_tokens: tokens
+                        }))
+                    }
+
                 }
                 break;
-
-            // case 'get_advertising_groups':
-            //     console.log("ADDDDD");
-            //     console.log([...groups.values()]);
-            //
-            //     break;
             case 'join_group':
                 // msg.id
                 // msg.code
@@ -184,6 +181,55 @@ server.on('connection', function connection(ws) {
                     updateGroups();
                 }
                 break;
+            case 'pause':
+
+                console.log("HERE");
+                let tokens = getTokensInGroup(users.get(msg.code).groupID);
+
+                
+
+                tokens.forEach((token)=> {
+                    fetch(baseAPI + '/v1/me/player/pause',
+                        {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': 'Bearer ' + token
+                            }
+                        })
+                        .then((response) => response.json())
+                        .then((data) =>{
+                            console.log("Success: ");
+                            console.log(data);
+
+
+                        })
+                        .catch((error) =>{
+                            console.log("Get errored:" + error);
+                        });}
+                    )
+
+
+
+                // fetch(baseAPI + '/v1/me/player/pause',
+                // {
+                //     method: 'PUT',
+                //     headers: {
+                //         'Authorization': 'Bearer ' + users.get(msg.code).token.access_token
+                //     }
+                // })
+                // .then((response) => response.json())
+                // .then((data) =>{
+                //     console.log("Success: ");
+                //     console.log(data);
+                //
+                //
+                // })
+                // .catch((error) =>{
+                //     console.log("Get errored:" + error);
+                // });
+                break;
+            case 'play':
+                break;
             default:
                 console.log("Unknown message type");
         }
@@ -206,7 +252,6 @@ server.on('connection', function connection(ws) {
             group.clients = group.clients.filter((client) => client != code)
 
             if (group.clients.length === 0) {
-                console.log("Here");
                 groups.delete(users.get(code).groupID)
             }
 
@@ -227,10 +272,10 @@ microservices.on('connection', function connection(ws){
         switch (msg.type) {
             case 'new':
                 console.log(msg.microservice_type);
-                services.set(msg.microservice_type, ws)
+                services.set(msg.microservice_type, ws);
                 break;
             case 'result':
-
+                console.log(msg);
                 break;
             default:
 
