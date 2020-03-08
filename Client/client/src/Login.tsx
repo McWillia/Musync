@@ -26,6 +26,7 @@ class App extends Component<IProps, IState> {
       "user-read-playback-state",
       "playlist-read-private",
       "playlist-modify-private",
+      "playlist-modify-public",
       "user-top-read",
       "user-modify-playback-state"
     ];
