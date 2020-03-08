@@ -25,8 +25,8 @@ export default class Playlist extends Component<IProps, IState> {
     this.props.client.send(JSON.stringify({code: this.props.code, type: 'get_playlists'}));
   }
 
-  openPlaylist(song_name: string){
-    alert("You have opened" + song_name)
+  openPlaylist(playlist_name: string){
+    alert("You have opened " + playlist_name)
   }
 
   render(){
@@ -47,11 +47,13 @@ export default class Playlist extends Component<IProps, IState> {
 
               obj = actual_data.items.map((playlist: any) => {
                 return(
-                  <div>
-                    {playlist.name}
-                    <button onClick={() => {this.openPlaylist(playlist.name)}}>Open {playlist.name}</button>
+                  <tr>
+                    <td>
+                    {playlist.name}</td>
+                    <td>
+                    <button onClick={() => {this.openPlaylist(playlist.name)}}>Open {playlist.name}</button></td>
                     <br />
-                  </div>
+                  </tr>
                 )
               })
 
@@ -69,9 +71,15 @@ export default class Playlist extends Component<IProps, IState> {
 
       <div>
         <button onClick={this.sendRequest}  >Show playlists</button>
-
-        {obj}
-
+          <table id='printTable'>
+            <tbody>
+              <tr>
+          		  <th>Playlist Name</th>
+          		  <th>Playlist link</th>
+          	  </tr>
+          	  {obj}
+            </tbody>
+        </table>
       </div>
     )
   }
