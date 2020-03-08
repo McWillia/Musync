@@ -3,7 +3,7 @@
 // extern crate serde;
 // extern crate serde_json;
 
-use ws::{connect, Handler, Sender, Handshake, Result, Message, Error, ErrorKind, CloseCode};
+use ws::{connect, Handler, Sender, Handshake, Result, Message, Error, ErrorKind/*, CloseCode*/};
 use rspotify::client::Spotify;
 use rspotify::senum::TimeRange;
 use serde::{Deserialize, Serialize};
@@ -70,11 +70,11 @@ impl Handler for Client {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     connect("ws://138.251.29.21:8082", |connection| Client {connection: connection}).unwrap();
 }
 
-#[tokio::main]
 async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
     let first_tracks = getUserTopTracks(String::from(access_tokens[0].as_str())).await;
     let first_tracks = match first_tracks {
@@ -83,7 +83,6 @@ async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
             panic!("Couldn't get top tracks: {:?}", error);
         },
     };
-    println!("First Tracks: {:?}", first_tracks);
     let second_tracks = getUserTopTracks(String::from(access_tokens[1].as_str())).await;
     let second_tracks = match second_tracks {
         Ok(tracks) => tracks,
@@ -91,7 +90,6 @@ async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
             panic!("Couldn't get top tracks: {:?}", error);
         },
     };
-    println!("Second Tracks: {:?}", second_tracks);
     return Ok(());
 }
 
@@ -99,19 +97,22 @@ async fn getUserTopTracks(access_token: String) -> Result<Vec<String>> {
     let spotify = Spotify::default()
         .access_token(access_token.as_str())
         .build();
-    let tracks = spotify
-        .current_user_top_tracks(50, 0, TimeRange::MediumTerm)
-        .await;
-    match tracks {
-        Ok(tracks) => {
-            let ids = tracks.items.iter().map(|track| String::from(track.id.as_ref().unwrap()) ).collect::<Vec<String>>();
-            return Ok(ids);
-        },
-        Err(error) => {
-            return Err(Error {
-                kind: ErrorKind::Internal,
-                details: Cow::Owned(String::from(error.name().unwrap())),
-            });
-        },
-    };
+    let mut ids: Vec<String> = Vec::new();
+    for time_range in [TimeRange::ShortTerm, TimeRange::MediumTerm, TimeRange::LongTerm].iter() {
+        let tracks = spotify
+            .current_user_top_tracks(50, 0, *time_range)
+            .await;
+            match tracks {
+                Ok(tracks) => {
+                ids.append(&mut tracks.items.iter().map(|track| String::from(track.id.as_ref().unwrap())).collect::<Vec<String>>());
+            },
+            Err(error) => {
+                return Err(Error {
+                    kind: ErrorKind::Internal,
+                    details: Cow::Owned(String::from(error.name().unwrap())),
+                });
+            },
+        };
+    }
+    return Ok(ids);
 }
