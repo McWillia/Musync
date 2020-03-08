@@ -69,6 +69,7 @@ impl Handler for Client {
                 },
             };
             createMutualPlaylist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect());
+            println!("Work complete");
         });
         return Ok(());
     }
@@ -91,14 +92,20 @@ fn main() {
 
 #[tokio::main]
 async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
-    let first_tracks = getUserTopTracks(String::from(access_tokens[0].as_str())).await;
+    let first_user = Spotify::default()
+        .access_token(&(access_tokens[0]))
+        .build();
+    let second_user = Spotify::default()
+        .access_token(&(access_tokens[1]))
+        .build();
+    let first_tracks = getUserTopTracks(&first_user).await;
     let first_tracks = match first_tracks {
         Ok(tracks) => tracks,
         Err(error) => {
             panic!("Couldn't get top tracks: {:?}", error);
         },
     };
-    let second_tracks = getUserTopTracks(String::from(access_tokens[1].as_str())).await;
+    let second_tracks = getUserTopTracks(&second_user).await;
     let second_tracks = match second_tracks {
         Ok(tracks) => tracks,
         Err(error) => {
@@ -106,24 +113,21 @@ async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
         },
     };
     let common_tracks = first_tracks.iter().filter_map(|track| match second_tracks.contains(track) {
-        true => Some(String::from(track.as_str())),
+        true => Some(String::from(track)),
         false => None,
     }).collect::<Vec<String>>();
-    let result = createPlaylist(String::from(access_tokens[0].as_str()), common_tracks).await;
+    let result = createPlaylist(&first_user, common_tracks).await;
     let (owner_id, playlist_id) = match result {
         Ok(result) => result,
         Err(error) => {
             panic!("Couldn't get top tracks: {:?}", error);
         },
     };
-    let result = followPlaylist(String::from(access_tokens[1].as_str()), owner_id, playlist_id).await;
+    let result = followPlaylist(&second_user, &owner_id, &playlist_id).await;
     return result;
 }
 
-async fn getUserTopTracks(access_token: String) -> Result<Vec<String>> {
-    let spotify = Spotify::default()
-        .access_token(access_token.as_str())
-        .build();
+async fn getUserTopTracks(spotify: &Spotify) -> Result<Vec<String>> {
     let mut ids: Vec<String> = Vec::new();
     for time_range in [TimeRange::ShortTerm, TimeRange::MediumTerm, TimeRange::LongTerm].iter() {
         let tracks = spotify
@@ -148,10 +152,7 @@ async fn getUserTopTracks(access_token: String) -> Result<Vec<String>> {
     return Ok(ids);
 }
 
-async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Result<(String, String)> {
-    let spotify = Spotify::default()
-        .access_token(access_token.as_str())
-        .build();
+async fn createPlaylist(spotify: &Spotify, common_tracks: Vec<String>) -> Result<(String, String)> {
     let user = spotify
         .current_user()
         .await;
@@ -188,13 +189,16 @@ async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Res
         let result = spotify
             .user_playlist_add_tracks(&user.id, &playlist.id, slice, None)
             .await;
-        result.or_else(|error| {
-            println!("Error adding tracks to playlist: {:?}", error);
-            return Err(Error {
-                kind: ErrorKind::Internal,
-                details: Cow::Owned(String::from("Couldn't add tracks to playlist")),
-            });
-        });
+        match result.err() {
+            Some(error) => {
+                println!("Error adding tracks to playlist: {:?}", error);
+                return Err(Error {
+                    kind: ErrorKind::Internal,
+                    details: Cow::Owned(String::from("Couldn't add tracks to playlist")),
+                });
+            },
+            None => {},
+        };
     }
     let modification = spotify
         .user_playlist_change_detail(&user.id, &playlist.id, None, None, None, Some(true))
@@ -211,10 +215,7 @@ async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Res
     };
 }
 
-async fn followPlaylist(access_token: String, owner_id: String, playlist_id: String) -> Result<()> {
-    let spotify = Spotify::default()
-        .access_token(access_token.as_str())
-        .build();
+async fn followPlaylist(spotify: &Spotify, owner_id: &str, playlist_id: &str) -> Result<()> {
     let result = spotify
         .user_playlist_follow_playlist(&owner_id, &playlist_id, None)
         .await;
