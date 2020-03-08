@@ -41,17 +41,20 @@ export default class Playlist extends Component<IProps, IState> {
               // console.log(actual_data.items);
 
               obj = actual_data.items.map((playlist: any) => {
+                console.log(playlist)
                 return(
                   <tr>
                     <td>
                     {playlist.name}</td>
                     <td>
-                    <button onClick={() => {this.openPlaylist(playlist.name)}}>Open {playlist.name}</button></td>
+                    <button onClick={() => {this.openPlaylist(playlist.name)}}>Open {playlist.name}</button>
+                    </td>
+                    <td>{playlist.images.length > 1 && playlist.images[2].url ? <img src={playlist.images[2].url} />: <div></div>}</td>
                     <br />
                   </tr>
                 )
               })
-
+//<td>{playlist.images[2].url}</td>
               // for(var i = 0; i < actual_data.items.length && actual_data.items; i++){
               //       obj.push(<div>{actual_data.items[i].name} <button onClick={() => {this.openPlaylist(actual_data.items[i].name)}}>Open {actual_data.items[i].name}</button><br /></div>);
               //     }
@@ -61,7 +64,7 @@ export default class Playlist extends Component<IProps, IState> {
     } else{
       obj.push(<div></div>)
     }
-
+//<th>Playlist image</th>
     return(
 
       <div>
@@ -72,6 +75,8 @@ export default class Playlist extends Component<IProps, IState> {
               <tr>
           		  <th>Playlist Name</th>
           		  <th>Playlist link</th>
+                <th>Playlist image</th>
+
           	  </tr>
           	  {obj}
             </tbody>
