@@ -42,11 +42,13 @@ export default class Playlist extends Component<IProps, IState> {
 
               obj = actual_data.items.map((playlist: any) => {
                 return(
-                  <div>
-                    {playlist.name}
-                    <button onClick={() => {this.openPlaylist(playlist.name)}}>Open {playlist.name}</button>
+                  <tr>
+                    <td>
+                    {playlist.name}</td>
+                    <td>
+                    <button onClick={() => {this.openPlaylist(playlist.name)}}>Open {playlist.name}</button></td>
                     <br />
-                  </div>
+                  </tr>
                 )
               })
 
@@ -63,10 +65,23 @@ export default class Playlist extends Component<IProps, IState> {
     return(
 
       <div>
+<<<<<<< HEAD
         <button onClick={this.sendRequest}  >Update Playlists</button>
 
         {obj}
 
+=======
+        <button onClick={this.sendRequest}  >Show playlists</button>
+          <table id='printTable'>
+            <tbody>
+              <tr>
+          		  <th>Playlist Name</th>
+          		  <th>Playlist link</th>
+          	  </tr>
+          	  {obj}
+            </tbody>
+        </table>
+>>>>>>> 4f5fcef874b58c722fe222eca45abea156b95094
       </div>
     )
   }
