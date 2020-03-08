@@ -8,11 +8,12 @@ use rspotify::client::Spotify;
 use rspotify::senum::TimeRange;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::thread;
+use threadpool::ThreadPool;
 // use serde_json::Result;
 
 struct Client {
     connection: Sender,
+    thread_pool: ThreadPool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -36,6 +37,7 @@ impl Handler for Client {
     
     fn on_open(&mut self, _: Handshake) -> Result<()> {
         println!("Connected to server");
+        self.thread_pool = ThreadPool::new(20);
         let init = InitMessage {
             r#type: String::from("new"),
             microservice_type: String::from("MutualPlaylist"),
@@ -51,51 +53,41 @@ impl Handler for Client {
     }
 
     fn on_message(&mut self, msg: Message) -> Result<()> {
-        let string = msg.as_text();
-        let string = match string {
-            Ok(string) => string,
-            Err(error) => {
-                panic!("Couldn't convert WebSocket message to string: {:?}", error);
-            },
-        };
-        let message = serde_json::from_str(string);
-        let message: InstructMessage = match message {
-            Ok(message) => message,
-            Err(error) => {
-                panic!("Couldn't convert string to InstructMessage struct: {:?}", error);
-            },
-        };
-        println!("Got access token: {:?}", message.access_tokens);
-        let child = thread::spawn(move || {
-            return createMutualPlaylist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect());
+        self.thread_pool.execute(move || {
+            println!("Message Received");
+            let string = msg.as_text();
+            let string = match string {
+                Ok(string) => string,
+                Err(error) => {
+                    panic!("Couldn't convert WebSocket message to string: {:?}", error);
+                },
+            };
+            let message = serde_json::from_str(string);
+            let message: InstructMessage = match message {
+                Ok(message) => message,
+                Err(error) => {
+                    panic!("Couldn't convert string to InstructMessage struct: {:?}", error);
+                },
+            };
+            createMutualPlaylist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect());
         });
         return Ok(());
-        // let res = child.join();
-        // match res {
-        //     Ok(res) => {
-        //         println!("Success");
-        //         return Ok(());
-        //     },
-        //     Err(error) => {
-        //         println!("Error: {:?}", error);
-        //         if let Some(string) = (*error).downcast_ref::<String>() {
-        //             return Err(Error {
-        //                 kind: ErrorKind::Internal,
-        //                 details: Cow::Owned(String::from(string)),
-        //             });
-        //         } else {
-        //             return Err(Error {
-        //                 kind: ErrorKind::Internal,
-        //                 details: Cow::Owned(String::from("Unknown Error")),
-        //             });
-        //         }
-        //     }
-        // };
+    }
+
+    fn on_close(&mut self, code: CloseCode, reason: &str) {
+        match code {
+            CloseCode::Normal => {
+                println!("Closed normally");
+                self.thread_pool.join();
+                println!("All threads joined");
+            },
+            _ => println!("The client encountered an error: {}", reason);
+        }
     }
 }
 
 fn main() {
-    connect("ws://138.251.29.11:8082", |connection| Client {connection: connection}).unwrap();
+    connect("ws://138.251.29.159:8082", |connection| Client {connection: connection}).unwrap();
 }
 
 #[tokio::main]
