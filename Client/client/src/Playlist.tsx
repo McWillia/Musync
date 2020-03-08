@@ -20,8 +20,13 @@ export default class Playlist extends Component<IProps, IState> {
         this.props.client.send(JSON.stringify({code: this.props.code, type: 'get_playlists'}));
     }
 
-    openPlaylist(song_name: string){
+    openPlaylist(song_name: string, id: string){
         alert("You have opened" + song_name)
+        this.props.client.send(JSON.stringify({
+            type:'add_to_queue',
+            code: this.props.code,
+            id: id
+        }))
     }
 
   render(){
@@ -38,7 +43,7 @@ export default class Playlist extends Component<IProps, IState> {
           //
           //
           if(actual_data){
-              // console.log(actual_data.items);
+              console.log(actual_data.items);
 
               obj = actual_data.items.map((playlist: any) => {
                 console.log(playlist)
@@ -47,7 +52,7 @@ export default class Playlist extends Component<IProps, IState> {
                     <td>
                     {playlist.name}</td>
                     <td>
-                    <button onClick={() => {this.openPlaylist(playlist.name)}}>Open {playlist.name}</button>
+                    <button onClick={() => {this.openPlaylist(playlist.name, playlist.id)}}>Open {playlist.name}</button>
                     </td>
                     <td>{playlist.images.length > 1 && playlist.images[2].url ? <img src={playlist.images[2].url} />: <div></div>}</td>
                     <br />

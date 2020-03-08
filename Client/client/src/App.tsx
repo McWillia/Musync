@@ -16,6 +16,8 @@ interface IState {
   readyState: number
 }
 
+const wsAddr = "ws://138.251.29.150:8081"
+
 export default class App extends Component<IProps, IState> {
     private code: string;
     private client: WebSocket;
@@ -27,7 +29,7 @@ export default class App extends Component<IProps, IState> {
           readyState: 0
         }
         this.code = props.location.search.slice(6);
-        this.client = new WebSocket("ws://138.251.29.150:8081");
+        this.client = new WebSocket(wsAddr);
     }
 
     componentDidMount() {
