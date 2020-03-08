@@ -36,6 +36,13 @@ struct InstructMessage {
 impl Handler for Client {
     
     fn on_open(&mut self, _: Handshake) -> Result<()> {
+        let con = self.connection.clone();
+        ctrlc::set_handler(move || {
+            match con.close(CloseCode::Normal){
+                Ok(_) => println!("Got close command"),
+                Err(error) => println!("Error closing socket: {}", error),
+            };
+        }).expect("Error setting Ctrl-C handler");
         println!("Connected to server");
         let init = InitMessage {
             r#type: String::from("new"),
@@ -68,8 +75,10 @@ impl Handler for Client {
                     panic!("Couldn't convert string to InstructMessage struct: {:?}", error);
                 },
             };
-            createMutualPlaylist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect());
-            println!("Work complete");
+            match create_mutual_playlist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect()) {
+                Ok(()) => println!("Work complete"),
+                Err(error) => println!("Couldn't create mutual playlist: {}", error),
+            };
         });
         return Ok(());
     }
@@ -78,11 +87,13 @@ impl Handler for Client {
         match code {
             CloseCode::Normal => {
                 println!("Closed normally");
-                self.thread_pool.join();
-                println!("All threads joined");
             },
-            _ => println!("The client encountered an error: {}", reason),
+            _ => {
+                println!("The client encountered an error: {}", reason);
+            },
         };
+        self.thread_pool.join();
+        println!("All threads joined");
     }
 }
 
@@ -91,21 +102,21 @@ fn main() {
 }
 
 #[tokio::main]
-async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
+async fn create_mutual_playlist(access_tokens: Vec<String>) -> Result<()> {
     let first_user = Spotify::default()
         .access_token(&(access_tokens[0]))
         .build();
     let second_user = Spotify::default()
         .access_token(&(access_tokens[1]))
         .build();
-    let first_tracks = getUserTopTracks(&first_user).await;
+    let first_tracks = get_user_top_tracks(&first_user).await;
     let first_tracks = match first_tracks {
         Ok(tracks) => tracks,
         Err(error) => {
             panic!("Couldn't get top tracks: {:?}", error);
         },
     };
-    let second_tracks = getUserTopTracks(&second_user).await;
+    let second_tracks = get_user_top_tracks(&second_user).await;
     let second_tracks = match second_tracks {
         Ok(tracks) => tracks,
         Err(error) => {
@@ -116,26 +127,26 @@ async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
         true => Some(String::from(track)),
         false => None,
     }).collect::<Vec<String>>();
-    let result = createPlaylist(&first_user, common_tracks).await;
+    let result = create_playlist(&first_user, common_tracks).await;
     let (owner_id, playlist_id) = match result {
         Ok(result) => result,
         Err(error) => {
             panic!("Couldn't get top tracks: {:?}", error);
         },
     };
-    let result = followPlaylist(&second_user, &owner_id, &playlist_id).await;
+    let result = follow_playlist(&second_user, &owner_id, &playlist_id).await;
     return result;
 }
 
-async fn getUserTopTracks(spotify: &Spotify) -> Result<Vec<String>> {
+async fn get_user_top_tracks(spotify: &Spotify) -> Result<Vec<String>> {
     let mut ids: Vec<String> = Vec::new();
     for time_range in [TimeRange::ShortTerm, TimeRange::MediumTerm, TimeRange::LongTerm].iter() {
-        let tracks = spotify
+        let result = spotify
             .current_user_top_tracks(50, 0, *time_range)
             .await;
-            match tracks {
-                Ok(tracks) => {
-                    ids.append(&mut tracks.items.iter().filter_map(|track| match &track.id {
+        match result {
+            Ok(tracks) => {
+                ids.append(&mut tracks.items.iter().filter_map(|track| match &track.id {
                     Some(id) => Some(String::from(id)),
                     None => None,
                 }).collect::<Vec<String>>());
@@ -152,7 +163,7 @@ async fn getUserTopTracks(spotify: &Spotify) -> Result<Vec<String>> {
     return Ok(ids);
 }
 
-async fn createPlaylist(spotify: &Spotify, common_tracks: Vec<String>) -> Result<(String, String)> {
+async fn create_playlist(spotify: &Spotify, common_tracks: Vec<String>) -> Result<(String, String)> {
     let user = spotify
         .current_user()
         .await;
@@ -166,10 +177,10 @@ async fn createPlaylist(spotify: &Spotify, common_tracks: Vec<String>) -> Result
             });
         },
     };
-    let playlist = spotify
+    let result = spotify
         .user_playlist_create(&user.id, "MutualPlaylist", Some(false), Some(String::from("MutualPlaylist")))
         .await;
-    let playlist = match playlist {
+    let playlist = match result {
         Ok(playlist) => playlist,
         Err(error) => {
             println!("Error creating playlist: {:?}", error);
@@ -200,11 +211,11 @@ async fn createPlaylist(spotify: &Spotify, common_tracks: Vec<String>) -> Result
             None => {},
         };
     }
-    let modification = spotify
+    let result = spotify
         .user_playlist_change_detail(&user.id, &playlist.id, None, None, None, Some(true))
         .await;
-    match modification {
-        Ok(modification) => return Ok((user.id, playlist.id)),
+    match result {
+        Ok(_) => return Ok((user.id, playlist.id)),
         Err(error) => {
             println!("Error making playlist collaborative: {:?}", error);
             return Err(Error {
@@ -215,12 +226,12 @@ async fn createPlaylist(spotify: &Spotify, common_tracks: Vec<String>) -> Result
     };
 }
 
-async fn followPlaylist(spotify: &Spotify, owner_id: &str, playlist_id: &str) -> Result<()> {
+async fn follow_playlist(spotify: &Spotify, owner_id: &str, playlist_id: &str) -> Result<()> {
     let result = spotify
         .user_playlist_follow_playlist(&owner_id, &playlist_id, None)
         .await;
     match result {
-        Ok(result) => return Ok(()),
+        Ok(_) => return Ok(()),
         Err(error) => {
             println!("Error following playlist: {:?}", error);
             return Err(Error {
