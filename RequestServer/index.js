@@ -20,7 +20,7 @@ app.options('*', cors());
 const server = new WebSocket.Server({ port: 8081 });
 const microservices = new WebSocket.Server({port:8082});
 
-const redirectUri = "http://localhost:3000/home";
+const redirectUri = "http://pc7-150-l:3000/home";
 const baseAPI = 'https://api.spotify.com';
 
 
@@ -31,7 +31,6 @@ let groups = new Map();
 let services = new Map();
 let groupNumber = 0;
 
-
 server.on('connection', function connection(ws) {
     console.log("Connection established");
     let code;
@@ -39,7 +38,7 @@ server.on('connection', function connection(ws) {
     function updateGroups (){
         for (user of users.values()) {
             user.ws.send(JSON.stringify({
-                'type': 'advertising_groups',
+                'message_type': 'advertising_groups',
                 'data': [...groups.values()]
             }));
         }
@@ -127,7 +126,7 @@ server.on('connection', function connection(ws) {
                     console.log("Success: ");
                     console.log(data);
                     ws.send(JSON.stringify({
-                        'type':'response_playlists',
+                        'message_type':'response_playlists',
                         'data': data
                     }));
                 })

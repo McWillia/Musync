@@ -27,7 +27,7 @@ export default class GroupTab extends Component<IProps, IState> {
 
         console.log(client.readyState)
         client.send(JSON.stringify({
-            'type': 'get_advertising_groups'
+            'message_type': 'get_advertising_groups'
         }))
 
 
@@ -37,7 +37,7 @@ export default class GroupTab extends Component<IProps, IState> {
         let {code, client} = this.props;
 
         client.send(JSON.stringify({
-            'type': 'join_group',
+            'message_type': 'join_group',
             'id': id,
             'code':code
         }))

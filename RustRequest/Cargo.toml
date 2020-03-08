@@ -1,5 +1,5 @@
 [package]
-name = "MutualPlaylist"
+name = "RustRequest"
 version = "0.1.0"
 authors = ["Simon <sc312@st-andrews.ac.uk>"]
 edition = "2018"
@@ -8,9 +8,8 @@ edition = "2018"
 
 [dependencies]
 ws = "*"
-rspotify = "*"
-tokio = { version = "*", features = ["full"] }
-serde = { version = "*", features = ["derive"] }
+serde = { version = "*", features = ["derive"]}
 serde_json = "*"
 threadpool = "*"
-ctrlc = "*"
+rspotify = "*"
+tokio = { version = "*", features = ["full"] }

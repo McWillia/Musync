@@ -20,7 +20,7 @@ class App extends Component<IProps, IState> {
 
   render(){
     const my_client_id="f092792439d74b7e9341f90719b98365";
-    const redirect_uri = "http://localhost:3000/home";
+    const redirect_uri = "http://pc7-150-l:3000/home";
     const scopes = [
       "user-read-currently-playing",
       "user-read-playback-state",
