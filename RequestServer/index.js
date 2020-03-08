@@ -20,7 +20,7 @@ app.options('*', cors());
 const server = new WebSocket.Server({ port: 8081 });
 const microservices = new WebSocket.Server({port:8082});
 
-const redirectUri = "http://pc7-150-l:3000/home";
+const redirectUri = "http://localhost:3000/home";
 const baseAPI = 'https://api.spotify.com';
 
 

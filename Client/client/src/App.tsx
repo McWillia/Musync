@@ -16,7 +16,7 @@ interface IState {
   readyState: number
 }
 
-const wsAddr = "ws://pc7-150-l:8080"
+const wsAddr = "ws://localhost:8080"
 
 export default class App extends Component<IProps, IState> {
     private code: string;

@@ -1,15 +1,9 @@
-// extern crate ws;
-// extern crate rspotify;
-// extern crate serde;
-// extern crate serde_json;
-
 use ws::{connect, Handler, Sender, Handshake, Result, Message, Error, ErrorKind, CloseCode};
 use rspotify::client::Spotify;
 use rspotify::senum::TimeRange;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use threadpool::ThreadPool;
-// use serde_json::Result;
 
 struct Client {
     connection: Sender,
@@ -97,21 +91,18 @@ impl Handler for Client {
     }
 }
 
-fn main() {
-    connect("ws://pc7-150-l:8080", |connection| Client {connection: connection, thread_pool: ThreadPool::new(20)}).unwrap();
-}
 
 #[tokio::main]
 async fn create_mutual_playlist(access_tokens: Vec<String>) -> Result<()> {
     let first_user = Spotify::default()
         .access_token(&(access_tokens[0]))
         .build();
-    let second_user = Spotify::default()
+        let second_user = Spotify::default()
         .access_token(&(access_tokens[1]))
         .build();
-    let first_tracks = get_user_top_tracks(&first_user).await;
-    let first_tracks = match first_tracks {
-        Ok(tracks) => tracks,
+        let first_tracks = get_user_top_tracks(&first_user).await;
+        let first_tracks = match first_tracks {
+            Ok(tracks) => tracks,
         Err(error) => {
             panic!("Couldn't get top tracks: {:?}", error);
         },
@@ -142,7 +133,7 @@ async fn get_user_top_tracks(spotify: &Spotify) -> Result<Vec<String>> {
     let mut ids: Vec<String> = Vec::new();
     for time_range in [TimeRange::ShortTerm, TimeRange::MediumTerm, TimeRange::LongTerm].iter() {
         let result = spotify
-            .current_user_top_tracks(50, 0, *time_range)
+        .current_user_top_tracks(50, 0, *time_range)
             .await;
         match result {
             Ok(tracks) => {
@@ -165,8 +156,8 @@ async fn get_user_top_tracks(spotify: &Spotify) -> Result<Vec<String>> {
 
 async fn create_playlist(spotify: &Spotify, common_tracks: Vec<String>) -> Result<(String, String)> {
     let user = spotify
-        .current_user()
-        .await;
+    .current_user()
+    .await;
     let user = match user {
         Ok(user) => user,
         Err(error) => {
@@ -180,7 +171,7 @@ async fn create_playlist(spotify: &Spotify, common_tracks: Vec<String>) -> Resul
     let result = spotify
         .user_playlist_create(&user.id, "MutualPlaylist", Some(false), Some(String::from("MutualPlaylist")))
         .await;
-    let playlist = match result {
+        let playlist = match result {
         Ok(playlist) => playlist,
         Err(error) => {
             println!("Error creating playlist: {:?}", error);
@@ -198,8 +189,8 @@ async fn create_playlist(spotify: &Spotify, common_tracks: Vec<String>) -> Resul
             slice = &common_tracks[x..];
         }
         let result = spotify
-            .user_playlist_add_tracks(&user.id, &playlist.id, slice, None)
-            .await;
+        .user_playlist_add_tracks(&user.id, &playlist.id, slice, None)
+        .await;
         match result.err() {
             Some(error) => {
                 println!("Error adding tracks to playlist: {:?}", error);
@@ -230,9 +221,9 @@ async fn follow_playlist(spotify: &Spotify, owner_id: &str, playlist_id: &str) -
     let result = spotify
         .user_playlist_follow_playlist(&owner_id, &playlist_id, None)
         .await;
-    match result {
-        Ok(_) => return Ok(()),
-        Err(error) => {
+        match result {
+            Ok(_) => return Ok(()),
+            Err(error) => {
             println!("Error following playlist: {:?}", error);
             return Err(Error {
                 kind: ErrorKind::Internal,
@@ -240,4 +231,8 @@ async fn follow_playlist(spotify: &Spotify, owner_id: &str, playlist_id: &str) -
             });
         },
     }
+}
+
+fn main() {
+    connect("ws://localhost:8080", |connection| Client {connection: connection, thread_pool: ThreadPool::new(20)}).unwrap();
 }
