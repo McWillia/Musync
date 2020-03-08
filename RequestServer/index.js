@@ -248,6 +248,49 @@ server.on('connection', function connection(ws) {
                         });}
                     )
                     break;
+
+            case 'add_to_queue':
+                let tokens1 = getTokensInGroup(users.get(msg.code).groupID);
+
+                fetch(baseAPI + '/v1/playlists/' + msg.id + '/tracks',
+                    {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'Bearer ' + tokens1[0]
+                        }
+                    })
+                    .then((response) => response.json())
+                    .then((data) =>{
+                        console.log("Success: ");
+                        console.log(data);
+
+
+                        // tokens1.forEach((token)=> {
+                        //     fetch(baseAPI + '/v1/me/player/queue?' + msg.uri,
+                        //         {
+                        //             method: 'POST',
+                        //             headers: {
+                        //                 'Authorization': 'Bearer ' + token
+                        //             }
+                        //         })
+                        //         .then((response) => response.json())
+                        //         .then((data) =>{
+                        //             console.log("Success: ");
+                        //             console.log(data);
+                        //
+                        //
+                        //         })
+                        //         .catch((error) =>{
+                        //             console.log("Get errored:" + error);
+                        //         });}
+                        //     )
+
+                    })
+                    .catch((error) =>{
+                        console.log("Get errored:" + error);
+                    });
+
+                break;
             default:
                 console.log("Unknown message type");
         }
