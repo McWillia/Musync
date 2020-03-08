@@ -65,12 +65,7 @@ export default class Playlist extends Component<IProps, IState> {
     return(
 
       <div>
-<<<<<<< HEAD
-        <button onClick={this.sendRequest}  >Update Playlists</button>
 
-        {obj}
-
-=======
         <button onClick={this.sendRequest}  >Show playlists</button>
           <table id='printTable'>
             <tbody>
@@ -81,7 +76,6 @@ export default class Playlist extends Component<IProps, IState> {
           	  {obj}
             </tbody>
         </table>
->>>>>>> 4f5fcef874b58c722fe222eca45abea156b95094
       </div>
     )
   }
