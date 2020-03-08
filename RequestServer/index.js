@@ -183,10 +183,7 @@ server.on('connection', function connection(ws) {
                 break;
             case 'pause':
 
-                console.log("HERE");
                 let tokens = getTokensInGroup(users.get(msg.code).groupID);
-
-                
 
                 tokens.forEach((token)=> {
                     fetch(baseAPI + '/v1/me/player/pause',
@@ -229,7 +226,28 @@ server.on('connection', function connection(ws) {
                 // });
                 break;
             case 'play':
-                break;
+                let tokeners = getTokensInGroup(users.get(msg.code).groupID);
+
+                tokeners.forEach((token)=> {
+                    fetch(baseAPI + '/v1/me/player/play',
+                        {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': 'Bearer ' + token
+                            }
+                        })
+                        .then((response) => response.json())
+                        .then((data) =>{
+                            console.log("Success: ");
+                            console.log(data);
+
+
+                        })
+                        .catch((error) =>{
+                            console.log("Get errored:" + error);
+                        });}
+                    )
+                    break;
             default:
                 console.log("Unknown message type");
         }
