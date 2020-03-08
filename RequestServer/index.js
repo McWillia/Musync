@@ -263,27 +263,32 @@ server.on('connection', function connection(ws) {
                     .then((data) =>{
                         console.log("Success: ");
                         console.log(data);
+                        let tracks = data.items;
+                        //Add each track
+                        tracks.forEach((track)=>{
+                            //To each user
+                            tokens1.forEach((token)=> {
+                                fetch(baseAPI + '/v1/me/player/queue?uri=' + track.track.uri,
+                                    {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': 'Bearer ' + token
+                                        }
+                                    })
+                                    .then((response) => response.json())
+                                    .then((data) =>{
+                                        console.log("Success: ");
+                                        console.log(data);
 
 
-                        // tokens1.forEach((token)=> {
-                        //     fetch(baseAPI + '/v1/me/player/queue?' + msg.uri,
-                        //         {
-                        //             method: 'POST',
-                        //             headers: {
-                        //                 'Authorization': 'Bearer ' + token
-                        //             }
-                        //         })
-                        //         .then((response) => response.json())
-                        //         .then((data) =>{
-                        //             console.log("Success: ");
-                        //             console.log(data);
-                        //
-                        //
-                        //         })
-                        //         .catch((error) =>{
-                        //             console.log("Get errored:" + error);
-                        //         });}
-                        //     )
+                                    })
+                                    .catch((error) =>{
+                                        console.log("Get errored:" + error);
+                                    });}
+                                )
+                        })
+
+
 
                     })
                     .catch((error) =>{
