@@ -3,7 +3,7 @@
 // extern crate serde;
 // extern crate serde_json;
 
-use ws::{connect, Handler, Sender, Handshake, Result, Message, Error, ErrorKind/*, CloseCode*/};
+use ws::{connect, Handler, Sender, Handshake, Result, Message, Error, ErrorKind, CloseCode};
 use rspotify::client::Spotify;
 use rspotify::senum::TimeRange;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,6 @@ impl Handler for Client {
     
     fn on_open(&mut self, _: Handshake) -> Result<()> {
         println!("Connected to server");
-        self.thread_pool = ThreadPool::new(20);
         let init = InitMessage {
             r#type: String::from("new"),
             microservice_type: String::from("MutualPlaylist"),
@@ -81,13 +80,13 @@ impl Handler for Client {
                 self.thread_pool.join();
                 println!("All threads joined");
             },
-            _ => println!("The client encountered an error: {}", reason);
-        }
+            _ => println!("The client encountered an error: {}", reason),
+        };
     }
 }
 
 fn main() {
-    connect("ws://138.251.29.159:8082", |connection| Client {connection: connection}).unwrap();
+    connect("ws://138.251.29.150:8082", |connection| Client {connection: connection, thread_pool: ThreadPool::new(20)}).unwrap();
 }
 
 #[tokio::main]
@@ -138,7 +137,7 @@ async fn getUserTopTracks(access_token: String) -> Result<Vec<String>> {
                 }).collect::<Vec<String>>());
             },
             Err(error) => {
-                println!("Error: {:?}", error);
+                println!("Error getting top tracks: {:?}", error);
                 return Err(Error {
                     kind: ErrorKind::Internal,
                     details: Cow::Owned(String::from("Couldn't get top tracks")),
@@ -159,7 +158,7 @@ async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Res
     let user = match user {
         Ok(user) => user,
         Err(error) => {
-            println!("Error: {:?}", error);
+            println!("Error getting current user: {:?}", error);
             return Err(Error {
                 kind: ErrorKind::Internal,
                 details: Cow::Owned(String::from("Couldn't get current user")),
@@ -172,7 +171,7 @@ async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Res
     let playlist = match playlist {
         Ok(playlist) => playlist,
         Err(error) => {
-            println!("Error: {:?}", error);
+            println!("Error creating playlist: {:?}", error);
             return Err(Error {
                 kind: ErrorKind::Internal,
                 details: Cow::Owned(String::from("Couldn't create playlist")),
@@ -181,7 +180,7 @@ async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Res
     };
     for x in (0..common_tracks.len()).step_by(20) {
         let slice;
-        if (common_tracks.len() > x + 20) {
+        if common_tracks.len() > x + 20 {
             slice = &common_tracks[x..x+20];
         } else {
             slice = &common_tracks[x..];
@@ -190,7 +189,7 @@ async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Res
             .user_playlist_add_tracks(&user.id, &playlist.id, slice, None)
             .await;
         result.or_else(|error| {
-            println!("Error: {:?}", error);
+            println!("Error adding tracks to playlist: {:?}", error);
             return Err(Error {
                 kind: ErrorKind::Internal,
                 details: Cow::Owned(String::from("Couldn't add tracks to playlist")),
@@ -203,7 +202,7 @@ async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Res
     match modification {
         Ok(modification) => return Ok((user.id, playlist.id)),
         Err(error) => {
-            println!("Error: {:?}", error);
+            println!("Error making playlist collaborative: {:?}", error);
             return Err(Error {
                 kind: ErrorKind::Internal,
                 details: Cow::Owned(String::from("Couldn't make playlist collaborative")),
@@ -222,7 +221,7 @@ async fn followPlaylist(access_token: String, owner_id: String, playlist_id: Str
     match result {
         Ok(result) => return Ok(()),
         Err(error) => {
-            println!("Error: {:?}", error);
+            println!("Error following playlist: {:?}", error);
             return Err(Error {
                 kind: ErrorKind::Internal,
                 details: Cow::Owned(String::from("Couldn't follow playlist")),
