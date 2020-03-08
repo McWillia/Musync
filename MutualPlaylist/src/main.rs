@@ -8,6 +8,7 @@ use rspotify::client::Spotify;
 use rspotify::senum::TimeRange;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::thread;
 // use serde_json::Result;
 
 struct Client {
@@ -65,16 +66,39 @@ impl Handler for Client {
             },
         };
         println!("Got access token: {:?}", message.access_tokens);
-        createMutualPlaylist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect());
+        let child = thread::spawn(move || {
+            return createMutualPlaylist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect());
+        });
         return Ok(());
+        // let res = child.join();
+        // match res {
+        //     Ok(res) => {
+        //         println!("Success");
+        //         return Ok(());
+        //     },
+        //     Err(error) => {
+        //         println!("Error: {:?}", error);
+        //         if let Some(string) = (*error).downcast_ref::<String>() {
+        //             return Err(Error {
+        //                 kind: ErrorKind::Internal,
+        //                 details: Cow::Owned(String::from(string)),
+        //             });
+        //         } else {
+        //             return Err(Error {
+        //                 kind: ErrorKind::Internal,
+        //                 details: Cow::Owned(String::from("Unknown Error")),
+        //             });
+        //         }
+        //     }
+        // };
     }
 }
 
-#[tokio::main]
-async fn main() {
-    connect("ws://138.251.29.21:8082", |connection| Client {connection: connection}).unwrap();
+fn main() {
+    connect("ws://138.251.29.11:8082", |connection| Client {connection: connection}).unwrap();
 }
 
+#[tokio::main]
 async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
     let first_tracks = getUserTopTracks(String::from(access_tokens[0].as_str())).await;
     let first_tracks = match first_tracks {
@@ -90,7 +114,19 @@ async fn createMutualPlaylist(access_tokens: Vec<String>) -> Result<()> {
             panic!("Couldn't get top tracks: {:?}", error);
         },
     };
-    return Ok(());
+    let common_tracks = first_tracks.iter().filter_map(|track| match second_tracks.contains(track) {
+        true => Some(String::from(track.as_str())),
+        false => None,
+    }).collect::<Vec<String>>();
+    let result = createPlaylist(String::from(access_tokens[0].as_str()), common_tracks).await;
+    let (owner_id, playlist_id) = match result {
+        Ok(result) => result,
+        Err(error) => {
+            panic!("Couldn't get top tracks: {:?}", error);
+        },
+    };
+    let result = followPlaylist(String::from(access_tokens[1].as_str()), owner_id, playlist_id).await;
+    return result;
 }
 
 async fn getUserTopTracks(access_token: String) -> Result<Vec<String>> {
@@ -104,15 +140,101 @@ async fn getUserTopTracks(access_token: String) -> Result<Vec<String>> {
             .await;
             match tracks {
                 Ok(tracks) => {
-                ids.append(&mut tracks.items.iter().map(|track| String::from(track.id.as_ref().unwrap())).collect::<Vec<String>>());
+                    ids.append(&mut tracks.items.iter().filter_map(|track| match &track.id {
+                    Some(id) => Some(String::from(id)),
+                    None => None,
+                }).collect::<Vec<String>>());
             },
             Err(error) => {
+                println!("Error: {:?}", error);
                 return Err(Error {
                     kind: ErrorKind::Internal,
-                    details: Cow::Owned(String::from(error.name().unwrap())),
+                    details: Cow::Owned(String::from("Couldn't get top tracks")),
                 });
             },
         };
     }
     return Ok(ids);
+}
+
+async fn createPlaylist(access_token: String, common_tracks: Vec<String>) -> Result<(String, String)> {
+    let spotify = Spotify::default()
+        .access_token(access_token.as_str())
+        .build();
+    let user = spotify
+        .current_user()
+        .await;
+    let user = match user {
+        Ok(user) => user,
+        Err(error) => {
+            println!("Error: {:?}", error);
+            return Err(Error {
+                kind: ErrorKind::Internal,
+                details: Cow::Owned(String::from("Couldn't get current user")),
+            });
+        },
+    };
+    let playlist = spotify
+        .user_playlist_create(&user.id, "MutualPlaylist", Some(false), Some(String::from("MutualPlaylist")))
+        .await;
+    let playlist = match playlist {
+        Ok(playlist) => playlist,
+        Err(error) => {
+            println!("Error: {:?}", error);
+            return Err(Error {
+                kind: ErrorKind::Internal,
+                details: Cow::Owned(String::from("Couldn't create playlist")),
+            });
+        },
+    };
+    for x in (0..common_tracks.len()).step_by(20) {
+        let slice;
+        if (common_tracks.len() > x + 20) {
+            slice = &common_tracks[x..x+20];
+        } else {
+            slice = &common_tracks[x..];
+        }
+        let result = spotify
+            .user_playlist_add_tracks(&user.id, &playlist.id, slice, None)
+            .await;
+        result.or_else(|error| {
+            println!("Error: {:?}", error);
+            return Err(Error {
+                kind: ErrorKind::Internal,
+                details: Cow::Owned(String::from("Couldn't add tracks to playlist")),
+            });
+        });
+    }
+    let modification = spotify
+        .user_playlist_change_detail(&user.id, &playlist.id, None, None, None, Some(true))
+        .await;
+    match modification {
+        Ok(modification) => return Ok((user.id, playlist.id)),
+        Err(error) => {
+            println!("Error: {:?}", error);
+            return Err(Error {
+                kind: ErrorKind::Internal,
+                details: Cow::Owned(String::from("Couldn't make playlist collaborative")),
+            });
+        },
+    };
+}
+
+async fn followPlaylist(access_token: String, owner_id: String, playlist_id: String) -> Result<()> {
+    let spotify = Spotify::default()
+        .access_token(access_token.as_str())
+        .build();
+    let result = spotify
+        .user_playlist_follow_playlist(&owner_id, &playlist_id, None)
+        .await;
+    match result {
+        Ok(result) => return Ok(()),
+        Err(error) => {
+            println!("Error: {:?}", error);
+            return Err(Error {
+                kind: ErrorKind::Internal,
+                details: Cow::Owned(String::from("Couldn't follow playlist")),
+            });
+        },
+    }
 }
