@@ -17,7 +17,7 @@ export default class MutualPlaylists extends Component<IProps, IState> {
   sendRequest(){
       var {client, code} = this.props;
 
-      this.props.client.send(JSON.stringify({code: this.props.code, type: 'make_mutual_playlist'}));
+      this.props.client.send(JSON.stringify({message_type: 'MakeMutualPlaylist'}));
   }
 
   render(){

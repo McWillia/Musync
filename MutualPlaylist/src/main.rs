@@ -10,17 +10,26 @@ struct Client {
     thread_pool: ThreadPool,
 }
 
-#[derive(Serialize, Deserialize)]
-struct MessageFormat {
-    message_type: String,
-    string: Option<String>,
-    id: Option<u32>,
-    groups: Option<Vec<Group>>,
+#[derive(Serialize, Deserialize, Clone, Copy)]
+enum MessageType {
+    Initialise,
+    NewClient,
+    NewService,
+    AdvertisingClientGroups,
+    GetPlaylists,
+    MakeMutualPlaylist,
+    JoinGroup,
+    Pause,
+    Play,
+    AddToQueue,
 }
 
 #[derive(Serialize, Deserialize)]
-struct InstructMessage {
-    access_tokens: Vec<String>,
+struct MessageFormat {
+    message_type: MessageType,
+    id: Option<u32>,
+    strings: Option<Vec<String>>,
+    //data: Option<Vec<ClientGroup>>,
 }
 
 impl Handler for Client {
@@ -35,10 +44,9 @@ impl Handler for Client {
         }).expect("Error setting Ctrl-C handler");
         println!("Connected to server");
         let init = MessageFormat {
-            message_type: String::from("new_service"),
-            string: String::from("MutualPlaylist"),
+            message_type: MessageType::NewService,
             id: None,
-            groups: None,
+            strings: Some(vec![String::from("MutualPlaylist")]),
         };
         let json = serde_json::to_string(&init);
         let json = match json {
@@ -60,16 +68,31 @@ impl Handler for Client {
                     panic!("Couldn't convert WebSocket message to string: {:?}", error);
                 },
             };
-            let message = serde_json::from_str(string);
-            let message: InstructMessage = match message {
+            let json: MessageFormat = match serde_json::from_str(string){
                 Ok(message) => message,
                 Err(error) => {
                     panic!("Couldn't convert string to InstructMessage struct: {:?}", error);
                 },
             };
-            match create_mutual_playlist(message.access_tokens.iter().map(|access_token| String::from(access_token)).collect()) {
-                Ok(()) => println!("Work complete"),
-                Err(error) => println!("Couldn't create mutual playlist: {}", error),
+            match json.message_type {
+                MessageType::Initialise => {
+                    println!("Initialise handshake complete");
+                },
+                MessageType::MakeMutualPlaylist => {
+                    let access_tokens = match json.strings {
+                        Some(token) => token,
+                        None => {
+                            panic!("No access tokens were provided");
+                        },
+                    };
+                    match create_mutual_playlist(&access_tokens) {
+                        Ok(()) => println!("Work complete"),
+                        Err(error) => println!("Couldn't create mutual playlist: {}", error),
+                    };
+                },
+                _ => {
+
+                },
             };
         });
         return Ok(());
@@ -91,38 +114,20 @@ impl Handler for Client {
 
 
 #[tokio::main]
-async fn create_mutual_playlist(access_tokens: Vec<String>) -> Result<()> {
+async fn create_mutual_playlist(access_tokens: &Vec<String>) -> Result<()> {
     let first_user = Spotify::default()
         .access_token(&(access_tokens[0]))
         .build();
-        let second_user = Spotify::default()
+    let second_user = Spotify::default()
         .access_token(&(access_tokens[1]))
         .build();
-        let first_tracks = get_user_top_tracks(&first_user).await;
-        let first_tracks = match first_tracks {
-            Ok(tracks) => tracks,
-        Err(error) => {
-            panic!("Couldn't get top tracks: {:?}", error);
-        },
-    };
-    let second_tracks = get_user_top_tracks(&second_user).await;
-    let second_tracks = match second_tracks {
-        Ok(tracks) => tracks,
-        Err(error) => {
-            panic!("Couldn't get top tracks: {:?}", error);
-        },
-    };
+    let first_tracks = get_user_top_tracks(&first_user).await.expect("Couldn't get user top tracks");
+    let second_tracks = get_user_top_tracks(&second_user).await.expect("Couldn't get user top tracks");
     let common_tracks = first_tracks.iter().filter_map(|track| match second_tracks.contains(track) {
         true => Some(String::from(track)),
         false => None,
     }).collect::<Vec<String>>();
-    let result = create_playlist(&first_user, common_tracks).await;
-    let (owner_id, playlist_id) = match result {
-        Ok(result) => result,
-        Err(error) => {
-            panic!("Couldn't get top tracks: {:?}", error);
-        },
-    };
+    let (owner_id, playlist_id) = create_playlist(&first_user, common_tracks).await.expect("Couldn't create playlist");
     let result = follow_playlist(&second_user, &owner_id, &playlist_id).await;
     return result;
 }
@@ -232,5 +237,5 @@ async fn follow_playlist(spotify: &Spotify, owner_id: &str, playlist_id: &str) -
 }
 
 fn main() {
-    connect("ws://localhost:8080", |connection| Client {connection: connection, thread_pool: ThreadPool::new(20)}).unwrap();
+    connect("ws://192.168.1.69:8080", |connection| Client {connection: connection, thread_pool: ThreadPool::new(20)}).unwrap();
 }

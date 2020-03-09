@@ -16,7 +16,7 @@ interface IState {
   readyState: number
 }
 
-const wsAddr = "ws://localhost:8080"
+const wsAddr = "ws://192.168.1.69:8080"
 
 export default class App extends Component<IProps, IState> {
     private code: string;
@@ -38,8 +38,8 @@ export default class App extends Component<IProps, IState> {
             console.log("Sending to server");
 
             let authCodeMessage = {
-                'message_type':'new_client',
-                'string':this.code
+                'message_type':'NewClient',
+                'strings':[this.code]
             }
             this.client.send(JSON.stringify(authCodeMessage));
             this.setState({readyState:this.client.readyState});
@@ -55,9 +55,9 @@ export default class App extends Component<IProps, IState> {
                         playlist_data: JSON.stringify(response.data)
                     })
                     break;
-                case 'advertising_groups':
-                    console.log(response.data)
-                    this.setState({group_data:response.data})
+                case 'AdvertisingClientGroups':
+                    console.log(response.groups)
+                    this.setState({group_data:response.groups})
                     break;
                 default:
             }

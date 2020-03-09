@@ -12,7 +12,7 @@ interface IState {
 
 export interface IGroup {
     advert: boolean,
-    id: number,
+    group_id: number,
     clients: string[]
 }
 
@@ -27,7 +27,7 @@ export default class GroupTab extends Component<IProps, IState> {
 
         console.log(client.readyState)
         client.send(JSON.stringify({
-            'message_type': 'get_advertising_groups'
+            'message_type': 'AdvertisingClientGroups'
         }))
 
 
@@ -37,7 +37,7 @@ export default class GroupTab extends Component<IProps, IState> {
         let {code, client} = this.props;
 
         client.send(JSON.stringify({
-            'message_type': 'join_group',
+            'message_type': 'JoinGroup',
             'id': id,
             'code':code
         }))
@@ -54,9 +54,9 @@ export default class GroupTab extends Component<IProps, IState> {
         let out = groups.map((group: IGroup) =>{
             return (
                 <div>
-                    {group.id}
+                    {group.group_id}
                     <button
-                        onClick={() => this.handleClick(group.id)}
+                        onClick={() => this.handleClick(group.group_id)}
                         >
                         Join
                     </button>
