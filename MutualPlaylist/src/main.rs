@@ -11,16 +11,12 @@ struct Client {
 }
 
 #[derive(Serialize, Deserialize)]
-struct InitMessage {
+struct MessageFormat {
     message_type: String,
-    string: String,
+    string: Option<String>,
+    id: Option<u32>,
+    groups: Option<Vec<Group>>,
 }
-
-// #[derive(Serialize, Deserialize)]
-// struct ResultMessage {
-//     r#type: String,
-//     result: FullTrack[],
-// }
 
 #[derive(Serialize, Deserialize)]
 struct InstructMessage {
@@ -38,18 +34,20 @@ impl Handler for Client {
             };
         }).expect("Error setting Ctrl-C handler");
         println!("Connected to server");
-        let init = InitMessage {
-            message_type: String::from("new"),
+        let init = MessageFormat {
+            message_type: String::from("new_service"),
             string: String::from("MutualPlaylist"),
+            id: None,
+            groups: None,
         };
         let json = serde_json::to_string(&init);
         let json = match json {
             Ok(json) => json,
             Err(error) => {
-                panic!("Couldn't convert InitMessage struct to json: {:?}", error);
+                panic!("Couldn't convert MessageFormat struct to json: {:?}", error);
             },
         };
-        return self.connection.send(json);
+        self.connection.send(json)
     }
 
     fn on_message(&mut self, msg: Message) -> Result<()> {

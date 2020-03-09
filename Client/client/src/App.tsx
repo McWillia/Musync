@@ -38,8 +38,8 @@ export default class App extends Component<IProps, IState> {
             console.log("Sending to server");
 
             let authCodeMessage = {
-                'message_type':'authCode',
-                'code':this.code
+                'message_type':'new_client',
+                'string':this.code
             }
             this.client.send(JSON.stringify(authCodeMessage));
             this.setState({readyState:this.client.readyState});

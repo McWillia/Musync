@@ -13,3 +13,4 @@ serde_json = "*"
 threadpool = "*"
 rspotify = "*"
 tokio = { version = "*", features = ["full"] }
+ctrlc = "*"

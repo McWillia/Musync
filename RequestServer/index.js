@@ -57,7 +57,7 @@ server.on('connection', function connection(ws) {
         console.log(msg);
 
         switch (msg.type) {
-            case 'authCode':
+            case 'new_client':
                 console.log("!!!");
 
                 var body = {
