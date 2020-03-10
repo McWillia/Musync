@@ -224,20 +224,7 @@ fn pause(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mu
                 continue
             },
         };
-        if Instant::now() > client.expires_at {
-            let new_token = match refresh_token(&client.access_token) {
-                Ok(token) => token,
-                Err(error) => {
-                    println!("Error refreshing access token: {:?}", error);
-                    return Ok(());
-                },
-            };
-            client.access_token = new_token.access_token;
-            match new_token.refresh_token {
-                Some(refresh_token) => client.refresh_token = refresh_token,
-                None => {},
-            };
-        }
+        check_refresh_client(client).expect("Couldn't refresh access token");
         spotify_pause(&client.access_token).expect("Couldn't pause all clients");
     }
     Ok(())
@@ -268,22 +255,27 @@ fn play(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mut
                 continue
             },
         };
-        if Instant::now() > client.expires_at {
-            let new_token = match refresh_token(&client.access_token) {
-                Ok(token) => token,
-                Err(error) => {
-                    println!("Error refreshing access token: {:?}", error);
-                    return Ok(());
-                },
-            };
-            client.access_token = new_token.access_token;
-            match new_token.refresh_token {
-                Some(refresh_token) => client.refresh_token = refresh_token,
-                None => {},
-            };
-        }
+        check_refresh_client(client).expect("Couldn't refresh access token");
         spotify_play(&client.access_token).expect("Couldn't pause all clients");
     }
+    Ok(())
+}
+
+fn check_refresh_client(client: &mut Client) -> Result<()> {
+    if Instant::now() > client.expires_at {
+        let new_token = match refresh_token(&client.access_token) {
+            Ok(token) => token,
+            Err(error) => {
+                println!("Error refreshing access token: {:?}", error);
+                return Ok(());
+            },
+        };
+        client.access_token = new_token.access_token;
+        match new_token.refresh_token {
+            Some(refresh_token) => client.refresh_token = refresh_token,
+            None => {},
+        };
+    };
     Ok(())
 }
 
@@ -462,15 +454,16 @@ fn broadcast_client_groups(owned_clients: &HashMap<u32, Client>, owned_client_gr
 }
 
 fn make_mutual_playlist(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mutex<HashMap<usize, ClientGroup>>, shared_service_groups: &Mutex<[Vec<Sender>; 2]>, connection: &Sender) -> Result<()> {
-    let owned_clients = shared_clients.lock().unwrap();
+    let mut owned_clients = shared_clients.lock().unwrap();
     let owned_client_groups = shared_client_groups.lock().unwrap();
-    let current_client = match owned_clients.get(&connection.connection_id()) {
+    let current_client = match owned_clients.get_mut(&connection.connection_id()) {
         Some(client) => client,
         None => {
             println!("Client doesn't exist in map");
             return Ok(());
         },
     };
+    check_refresh_client(current_client).expect("Couldn't refresh access token");
     let current_group = match owned_client_groups.get(&current_client.group_id) {
         Some(group) => group,
         None => {
