@@ -11,6 +11,6 @@ ws = "*"
 serde = { version = "*", features = ["derive"]}
 serde_json = "*"
 threadpool = "*"
+dashmap = "*"
 rspotify = "*"
 tokio = { version = "*", features = ["full"] }
-ctrlc = "*"

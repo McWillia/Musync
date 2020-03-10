@@ -1,10 +1,10 @@
 use ws::{listen, Handler, Sender, Result, Message, Handshake, CloseCode, Error, ErrorKind};
 use serde::{Serialize, Deserialize};
 use threadpool::ThreadPool;
-use std::collections::HashMap;
 use rspotify::client::Spotify;
 use rspotify::oauth2::{SpotifyOAuth, TokenInfo};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
+use dashmap::DashMap;
 use std::borrow::Cow;
 use std::time::{Instant, Duration};
 
@@ -62,11 +62,11 @@ struct ClientGroup {
 
 struct Server {
     connection: Sender,
-    connection_type: Arc<Mutex<ConnectionType>>,
-    clients: Arc<Mutex<HashMap<u32, Client>>>,
-    client_groups: Arc<Mutex<HashMap<usize, ClientGroup>>>,
-    client_group_count: Arc<Mutex<usize>>,
-    service_groups: Arc<Mutex<[Vec<Sender>; 2]>>,
+    connection_type: Arc<RwLock<ConnectionType>>,
+    clients: Arc<DashMap<u32, Client>>,
+    client_groups: Arc<DashMap<usize, ClientGroup>>,
+    client_group_count: Arc<RwLock<usize>>,
+    service_groups: Arc<[RwLock<Vec<Sender>>; 2]>,
     thread_pool: Arc<ThreadPool>,
 }
 
@@ -116,8 +116,7 @@ impl Handler for Server {
             match json.message_type {
                 MessageType::NewClient => {
                     new_client(&shared_clients, &shared_client_groups, &shared_client_group_count, &json, &connection).expect("Could't make new client");
-                    let mut owned_connection_type = shared_connection_type.lock().unwrap();
-                    *owned_connection_type = ConnectionType::Client;
+                    *shared_connection_type.write().unwrap() = ConnectionType::Client;
                 },
                 MessageType::MakeMutualPlaylist => {
                     make_mutual_playlist(&shared_clients, &shared_client_groups, &shared_service_groups, &connection).expect("Couldn't make mutual playlist");
@@ -128,8 +127,7 @@ impl Handler for Server {
                 MessageType::NewService => {
                     match new_service(&shared_service_groups, &json, &connection) {
                         Ok(service_type) => {
-                            let mut owned_connection_type = shared_connection_type.lock().unwrap();
-                            *owned_connection_type = ConnectionType::Service(service_type);
+                            *shared_connection_type.write().unwrap() = ConnectionType::Service(service_type);
                         },
                         Err(error) => {
                             panic!("Couldn't add new service: {:?}", error);
@@ -152,18 +150,14 @@ impl Handler for Server {
 
     fn on_close(&mut self, code: CloseCode, reason: &str) {
         println!("Connection closed: {:?}", self.connection);
-        let owned_connection_type = self.connection_type.lock().unwrap();
-        match *owned_connection_type {
+        match *self.connection_type.read().unwrap() {
             ConnectionType::Client => {
-                let owned_clients = self.clients.lock().unwrap();
-                let ref mut owned_client_groups = self.client_groups.lock().unwrap();
-                if owned_clients.contains_key(&self.connection.connection_id()) {
-                    remove_client(&owned_clients, owned_client_groups, &self.connection).expect("Couldn't remove client");
-                    broadcast_client_groups(&owned_clients, owned_client_groups).expect("Couldn't broadcast client groups");
+                if self.clients.contains_key(&self.connection.connection_id()) {
+                    remove_client(&self.clients, &self.client_groups, &self.connection).expect("Couldn't remove client");
+                    broadcast_client_groups(&self.clients, &self.client_groups).expect("Couldn't broadcast client groups");
                 };
             },
             ConnectionType::Service(service_type) => {
-                let mut owned_service_groups = self.service_groups.lock().unwrap();
                 let group_index = match service_type {
                     ServiceType::MutualPlaylist => 0,
                     ServiceType::Other => 1,
@@ -172,15 +166,14 @@ impl Handler for Server {
                         return;
                     }
                 };
-                let service_index_in_group = owned_service_groups[group_index].iter().position(|service| *service == self.connection);
-                let service_index_in_group = match service_index_in_group {
+                let service_index_in_group = match self.service_groups[group_index].read().unwrap().iter().position(|service| *service == self.connection) {
                     Some(index) => index,
                     None =>  {
                         println!("Service connection {:?} doesn't exist in service group list", self.connection);
                         return;
                     },
                 };
-                owned_service_groups[group_index].remove(service_index_in_group);
+                self.service_groups[group_index].write().unwrap().remove(service_index_in_group);
             },
             ConnectionType::Unknown => {
                 println!("Connection closed that hadn't done anything");
@@ -199,17 +192,15 @@ impl Handler for Server {
     }
 }
 
-fn pause(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mutex<HashMap<usize, ClientGroup>>, connection: &Sender) -> Result<()> {
-    let mut owned_clients = shared_clients.lock().unwrap();
-    let owned_client_groups = shared_client_groups.lock().unwrap();
-    let current_client = match owned_clients.get(&connection.connection_id()) {
+fn pause(clients: &DashMap<u32, Client>, client_groups: &DashMap<usize, ClientGroup>, connection: &Sender) -> Result<()> {
+    let current_client = match clients.get(&connection.connection_id()) {
         Some(client) => client,
         None => {
             println!("Couldn't find client in map");
             return Ok(());
         },
     };
-    let current_group = match owned_client_groups.get(&current_client.group_id) {
+    let current_group = match client_groups.get(&current_client.group_id) {
         Some(group) => group,
         None => {
             println!("Client belongs to nonexistent group");
@@ -217,30 +208,28 @@ fn pause(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mu
         },
     };
     for client_id in current_group.clients.iter() {
-        let client = match owned_clients.get_mut(client_id) {
+        let mut client = match clients.get_mut(client_id) {
             Some(client) => client,
             None => {
                 println!("Client {} doesn't exist in map", client_id);
                 continue
             },
         };
-        check_refresh_client(client).expect("Couldn't refresh access token");
+        check_refresh_client(&mut client).expect("Couldn't refresh access token");
         spotify_pause(&client.access_token).expect("Couldn't pause all clients");
     }
     Ok(())
 }
 
-fn play(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mutex<HashMap<usize, ClientGroup>>, connection: &Sender) -> Result<()> {
-    let mut owned_clients = shared_clients.lock().unwrap();
-    let owned_client_groups = shared_client_groups.lock().unwrap();
-    let current_client = match owned_clients.get(&connection.connection_id()) {
+fn play(clients: &DashMap<u32, Client>, client_groups: &DashMap<usize, ClientGroup>, connection: &Sender) -> Result<()> {
+    let current_client = match clients.get(&connection.connection_id()) {
         Some(client) => client,
         None => {
             println!("Couldn't find client in map");
             return Ok(());
         },
     };
-    let current_group = match owned_client_groups.get(&current_client.group_id) {
+    let current_group = match client_groups.get(&current_client.group_id) {
         Some(group) => group,
         None => {
             println!("Client belongs to nonexistent group");
@@ -248,14 +237,14 @@ fn play(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mut
         },
     };
     for client_id in current_group.clients.iter() {
-        let client = match owned_clients.get_mut(client_id) {
+        let mut client = match clients.get_mut(client_id) {
             Some(client) => client,
             None => {
                 println!("Client {} doesn't exist in map", client_id);
                 continue
             },
         };
-        check_refresh_client(client).expect("Couldn't refresh access token");
+        check_refresh_client(&mut client).expect("Couldn't refresh access token");
         spotify_play(&client.access_token).expect("Couldn't pause all clients");
     }
     Ok(())
@@ -279,7 +268,7 @@ fn check_refresh_client(client: &mut Client) -> Result<()> {
     Ok(())
 }
 
-fn new_client(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mutex<HashMap<usize, ClientGroup>>, shared_client_group_count: &Mutex<usize>, json: &MessageFormat, connection: &Sender) -> Result<()> {
+fn new_client(clients: &DashMap<u32, Client>, client_groups: &DashMap<usize, ClientGroup>, client_group_count: &RwLock<usize>, json: &MessageFormat, connection: &Sender) -> Result<()> {
     let auth_code = match &json.strings {
         Some(code) => &code[0],
         None => {
@@ -291,58 +280,44 @@ fn new_client(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups
         },
     };
     let token = spotify_get_access_token(&auth_code).expect("Couldn't get access token");
-    let ref mut owned_clients = shared_clients.lock().unwrap();
-    let ref mut owned_client_groups = shared_client_groups.lock().unwrap();
-    add_new_client(owned_clients, owned_client_groups, shared_client_group_count, &token, connection).expect("Couldn't add new client");
-    broadcast_client_groups(&owned_clients, &owned_client_groups).expect("Couldn't broadcast client groups");
+    add_new_client(&clients, &client_groups, &client_group_count, &token, connection).expect("Couldn't add new client");
+    broadcast_client_groups(&clients, &client_groups).expect("Couldn't broadcast client groups");
     Ok(())
 }
 
-fn add_client_to_group(owned_client_groups: &mut HashMap<usize, ClientGroup>, group_id: &usize, connection: &Sender) -> Result<()> {
-    if owned_client_groups.len() > *group_id {
-        let destination_group = match owned_client_groups.get_mut(group_id) {
-            Some(group) => group,
-            None => {
-                println!("Destination group doesn't exist");
-                return Ok(());
-            },
-        };
-        destination_group.clients.push(connection.connection_id());
-    } else {
-        let new_group = ClientGroup {
-            group_id: *group_id,
-            is_advertising: false,
-            clients: vec![connection.connection_id()],
-        };
-        owned_client_groups.insert(*group_id, new_group);
+fn add_client_to_group(client_groups: &DashMap<usize, ClientGroup>, group_id: &usize, connection: &Sender) -> Result<()> {
+    match client_groups.get_mut(group_id) {
+        Some(mut existing_group) => {
+            existing_group.clients.push(connection.connection_id());
+        },
+        None => {
+            client_groups.insert(*group_id, ClientGroup {
+                group_id: *group_id,
+                is_advertising: false,
+                clients: vec![connection.connection_id()],
+            });
+        },
+    };
+    return Ok(());
+}
+
+fn remove_client_from_group(client_groups: &DashMap<usize, ClientGroup>, group_id: &usize, connection: &Sender) -> Result<()> {
+    let mut current_group = client_groups.get_mut(group_id).unwrap();
+    let client_index_in_group = match current_group.clients.iter().position(|client_id| *client_id == connection.connection_id()) {
+        Some(index) => index,
+        None => {
+            println!("Couldn't find client in client group");
+            return Ok(());
+        },
+    };
+    current_group.clients.remove(client_index_in_group);
+    if current_group.clients.len() == 0 {
+        client_groups.remove(group_id);
     }
     return Ok(());
 }
 
-fn remove_client_from_group(owned_client_groups: &mut HashMap<usize, ClientGroup>, group_id: &usize, connection: &Sender) -> Result<()> {
-    let group = match owned_client_groups.get_mut(&group_id) {
-        Some(group) => group,
-        None => {
-            println!("Client belongs to nonexistent group");
-            return Ok(());
-        },
-    };
-    if group.clients.len() == 1 {
-        owned_client_groups.remove(&group_id);
-    } else {
-        let client_index_in_group = match group.clients.iter().position(|client| *client == connection.connection_id()) {
-            Some(index) => index,
-            None => {
-                println!("Couldn't find client in client group");
-                return Ok(());
-            },
-        };
-        group.clients.remove(client_index_in_group);
-    };
-    return Ok(());
-}
-
-fn new_service(shared_service_groups: &Mutex<[Vec<Sender>; 2]>, json: &MessageFormat, connection: &Sender) -> Result<ServiceType> {
+fn new_service(service_groups: &[RwLock<Vec<Sender>>; 2], json: &MessageFormat, connection: &Sender) -> Result<ServiceType> {
     let service_type = match &json.strings {
         Some(string) => &string[0],
         None => {
@@ -350,20 +325,19 @@ fn new_service(shared_service_groups: &Mutex<[Vec<Sender>; 2]>, json: &MessageFo
             return Ok(ServiceType::Unknown);
         },
     };
-    let mut owned_service_groups = shared_service_groups.lock().unwrap();
     match service_type.as_str() {
         "MutualPlaylist" => {
-            owned_service_groups[0].push(connection.clone());
+            service_groups[0].write().unwrap().push(connection.clone());
             return Ok(ServiceType::MutualPlaylist);
         },
         &_ => {
-            owned_service_groups[1].push(connection.clone());
+            service_groups[1].write().unwrap().push(connection.clone());
             return Ok(ServiceType::Other)
         },
     };
 }
 
-fn join_group(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mutex<HashMap<usize, ClientGroup>>, json: &MessageFormat, connection: &Sender) -> Result<()> {
+fn join_group(clients: &DashMap<u32, Client>, client_groups: &DashMap<usize, ClientGroup>, json: &MessageFormat, connection: &Sender) -> Result<()> {
     let group_id = match json.id {
         Some(id) => id,
         None => {
@@ -371,36 +345,28 @@ fn join_group(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups
             return Ok(());
         },
     };
-    let mut owned_clients = shared_clients.lock().unwrap();
-    let ref mut owned_client_groups = shared_client_groups.lock().unwrap();
-    if !owned_client_groups.contains_key(&group_id) { 
-        println!("Client specified nonexistent group");
-        return Err(Error {
-            kind: ErrorKind::Internal,
-            details: Cow::Owned(String::from("Client specified nonexistent group")),
-        });
-    }
-    let current_client = match owned_clients.get_mut(&connection.connection_id()) {
+    let mut current_client = match clients.get_mut(&connection.connection_id()) {
         Some(client) => client,
         None => {
             println!("Client doesn't exist in map");
             return Ok(());
         },
     };
-    remove_client_from_group(owned_client_groups, &current_client.group_id, connection).expect("Couldn't remove client from group");
+    remove_client_from_group(&client_groups, &current_client.group_id, connection).expect("Couldn't remove client from group");
     current_client.group_id = group_id;
-    add_client_to_group(owned_client_groups, &current_client.group_id, connection).expect("Couldn't add client to group");
-    let updated_group = owned_client_groups.get(&current_client.group_id);
-    match updated_group {
-        Some(group) => println!("Updated group: {:?}", group),
-        None => {},
-    }
-    broadcast_client_groups(&owned_clients, &owned_client_groups).expect("Couldn't broadcast client groups");
+    add_client_to_group(&client_groups, &current_client.group_id, connection).expect("Couldn't add client to group");
+    broadcast_client_groups(&clients, &client_groups).expect("Couldn't broadcast client groups");
     Ok(())
 }
 
-fn add_new_client(owned_clients: &mut HashMap<u32, Client>, owned_client_groups: &mut HashMap<usize, ClientGroup>, shared_client_group_count: &Mutex<usize>, token: &TokenInfo, connection: &Sender) -> Result<()> {
-    let new_group_id = owned_client_groups.len();
+fn increment_group_count(client_group_count: &RwLock<usize>) -> usize {
+    let mut client_group_count = client_group_count.write().unwrap();
+    *client_group_count += 1;
+    return *client_group_count;
+}
+
+fn add_new_client(clients: &DashMap<u32, Client>, client_groups: &DashMap<usize, ClientGroup>, client_group_count: &RwLock<usize>, token: &TokenInfo, connection: &Sender) -> Result<()> {
+    let new_group_id = increment_group_count(client_group_count);
     let new_client = Client {
         group_id: new_group_id,
         access_token: token.access_token.clone(),
@@ -408,31 +374,30 @@ fn add_new_client(owned_clients: &mut HashMap<u32, Client>, owned_client_groups:
         refresh_token: token.refresh_token.clone().unwrap(),
         connection: connection.clone(),
     };
-    owned_clients.insert(connection.connection_id(), new_client);
-    let mut owned_client_group_count = shared_client_group_count.lock().unwrap();
-    add_client_to_group(owned_client_groups, &owned_client_group_count, connection).expect("Couldn't add client to group");
-    *owned_client_group_count += 1;
+    clients.insert(connection.connection_id(), new_client);
+    add_client_to_group(&client_groups, &new_group_id, &connection).expect("Couldn't add client to group");
     Ok(())
 }
 
-fn remove_client(owned_clients: &HashMap<u32, Client>, owned_client_groups: &mut HashMap<usize, ClientGroup>, connection: &Sender) -> Result<()> {
-    let client = match owned_clients.get(&connection.connection_id()) {
+fn remove_client(clients: &DashMap<u32, Client>, client_groups: &DashMap<usize, ClientGroup>, connection: &Sender) -> Result<()> {
+    let client = match clients.get(&connection.connection_id()) {
         Some(client) => client,
         None => {
             println!("Client doesn't exist in map");
             return Ok(());
         },
     };
-    remove_client_from_group(owned_client_groups, &client.group_id, connection).expect("Couldn't remove client from group");
+    remove_client_from_group(&client_groups, &client.group_id, &connection).expect("Couldn't remove client from group");
+    clients.remove(&connection.connection_id());
     return Ok(())
 }
 
-fn broadcast_client_groups(owned_clients: &HashMap<u32, Client>, owned_client_groups: &HashMap<usize, ClientGroup>) -> Result<()> {
+fn broadcast_client_groups(clients: &DashMap<u32, Client>, client_groups: &DashMap<usize, ClientGroup>) -> Result<()> {
     let message = MessageFormat {
         message_type: MessageType::AdvertisingClientGroups,
         id: None,
         strings: None,
-        groups: Some(owned_client_groups.values().map(|group| group.clone()).collect()),
+        groups: Some(client_groups.iter().map(|group| group.clone()).collect()),
     };
     let json = match serde_json::to_string(&message) {
         Ok(json) => json,
@@ -441,7 +406,7 @@ fn broadcast_client_groups(owned_clients: &HashMap<u32, Client>, owned_client_gr
             return Ok(());
         },
     };
-    for client in owned_clients.values() {
+    for client in clients.iter() {
         match client.connection.send(json.clone()) {
             Ok(()) => {},
             Err(error) => {
@@ -453,18 +418,16 @@ fn broadcast_client_groups(owned_clients: &HashMap<u32, Client>, owned_client_gr
     return Ok(());
 }
 
-fn make_mutual_playlist(shared_clients: &Mutex<HashMap<u32, Client>>, shared_client_groups: &Mutex<HashMap<usize, ClientGroup>>, shared_service_groups: &Mutex<[Vec<Sender>; 2]>, connection: &Sender) -> Result<()> {
-    let mut owned_clients = shared_clients.lock().unwrap();
-    let owned_client_groups = shared_client_groups.lock().unwrap();
-    let current_client = match owned_clients.get_mut(&connection.connection_id()) {
+fn make_mutual_playlist(clients: &DashMap<u32, Client>, client_groups: &DashMap<usize, ClientGroup>, service_groups: &[RwLock<Vec<Sender>>; 2], connection: &Sender) -> Result<()> {
+    let mut current_client = match clients.get_mut(&connection.connection_id()) {
         Some(client) => client,
         None => {
             println!("Client doesn't exist in map");
             return Ok(());
         },
     };
-    check_refresh_client(current_client).expect("Couldn't refresh access token");
-    let current_group = match owned_client_groups.get(&current_client.group_id) {
+    check_refresh_client(&mut current_client).expect("Couldn't refresh access token");
+    let current_group = match client_groups.get(&current_client.group_id) {
         Some(group) => group,
         None => {
             println!("Client belongs to nonexistent group");
@@ -478,7 +441,7 @@ fn make_mutual_playlist(shared_clients: &Mutex<HashMap<u32, Client>>, shared_cli
     let message = MessageFormat {
         message_type: MessageType::MakeMutualPlaylist,
         id: None,
-        strings: Some(current_group.clients.iter().filter_map(|client| match owned_clients.get(client) {
+        strings: Some(current_group.clients.iter().filter_map(|client| match clients.get(client) {
             Some(client) => Some(client.access_token.clone()),
             None => None,
         }).collect()),
@@ -491,19 +454,19 @@ fn make_mutual_playlist(shared_clients: &Mutex<HashMap<u32, Client>>, shared_cli
             return Ok(());
         },
     };
-    let mut owned_service_groups = shared_service_groups.lock().unwrap();
-    if owned_service_groups[0].len() == 0 {
+    let mut mutual_playlist_group = service_groups[0].write().unwrap();
+    if mutual_playlist_group.len() == 0 {
         println!("There are no microservices currently prepared");
         return Ok(());
     };
-    match owned_service_groups[0][0].send(json) {
+    match mutual_playlist_group[0].send(json) {
         Ok(()) => {},
         Err(error) => {
             println!("Couldn't send message to client: {:?}", error);
             return Ok(());
         },
     };
-    owned_service_groups[0].rotate_left(1);
+    mutual_playlist_group.rotate_left(1);
     Ok(())
 }
 
@@ -577,10 +540,10 @@ async fn refresh_token(refresh_token: &str) -> Result<TokenInfo> {
 }
 
 fn main() {
-    let clients = Arc::new(Mutex::new(HashMap::new()));
-    let client_groups = Arc::new(Mutex::new(HashMap::new()));
-    let client_group_count = Arc::new(Mutex::new(0));
-    let service_groups = Arc::new(Mutex::new([Vec::new(), Vec::new()]));
+    let clients = Arc::new(DashMap::new());
+    let client_groups = Arc::new(DashMap::new());
+    let client_group_count = Arc::new(RwLock::new(0));
+    let service_groups = Arc::new([RwLock::new(Vec::new()), RwLock::new(Vec::new())]);
     let threads = Arc::new(ThreadPool::new(50));
-    listen("192.168.1.69:8080", |connection| Server {connection: connection, connection_type: Arc::new(Mutex::new(ConnectionType::Unknown)), clients: Arc::clone(&clients), client_groups: Arc::clone(&client_groups), client_group_count: Arc::clone(&client_group_count), service_groups: Arc::clone(&service_groups), thread_pool: Arc::clone(&threads)}).unwrap();
+    listen("192.168.1.69:8080", |connection| Server {connection: connection, connection_type: Arc::new(RwLock::new(ConnectionType::Unknown)), clients: Arc::clone(&clients), client_groups: Arc::clone(&client_groups), client_group_count: Arc::clone(&client_group_count), service_groups: Arc::clone(&service_groups), thread_pool: Arc::clone(&threads)}).unwrap();
 }
