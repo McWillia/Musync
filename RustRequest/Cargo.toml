@@ -1,5 +1,5 @@
 [package]
-name = "RustRequest"
+name = "musink"
 version = "0.1.0"
 authors = ["Simon <SimonHCadge@gmail.com>"]
 edition = "2018"

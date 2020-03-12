@@ -27,14 +27,12 @@ export default class Player extends Component<IProps, IState> {
             //pause
             client.send(JSON.stringify({
                 'message_type': 'Pause',
-                'code': code
             }))
             this.setState({is_playing:false})
         } else {
             //play
             client.send(JSON.stringify({
                 'message_type': 'Play',
-                'code': code
             }))
 
 
