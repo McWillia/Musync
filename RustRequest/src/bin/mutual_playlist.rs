@@ -1,9 +1,12 @@
-use ws::{connect, Handler, Sender, Handshake, Result as WSResult, Message, Error as WSError, ErrorKind, CloseCode};
+use ws::{connect, Handler, Sender, Handshake, Result, Message, CloseCode, Error, ErrorKind};
 use rspotify::client::Spotify;
+use std::sync::Arc;
+use std::borrow::Cow;
 
 use musink::communication::{
     MessageFormat,
     MessageType,
+    MessageError,
 };
 use musink::spotify::*;
 
@@ -13,7 +16,7 @@ struct Client {
 
 impl Handler for Client {
     
-    fn on_open(&mut self, _: Handshake) -> WSResult<()> {
+    fn on_open(&mut self, _: Handshake) -> Result<()> {
         println!("Connected to server");
         let init = MessageFormat {
             message_type: MessageType::NewService,
@@ -31,44 +34,9 @@ impl Handler for Client {
         self.connection.send(json)
     }
 
-    fn on_message(&mut self, msg: Message) -> WSResult<()> {
-        let message = msg.clone();
-        tokio::spawn(async move{
-            println!("Message Received");
-            let string = match message.as_text() {
-                Ok(string) => string,
-                Err(error) => {
-                    panic!("Couldn't convert WebSocket message to string: {:?}", error);
-                },
-            };
-            let json: MessageFormat = match serde_json::from_str(string){
-                Ok(message) => message,
-                Err(error) => {
-                    panic!("Couldn't convert string to InstructMessage struct: {:?}", error);
-                },
-            };
-            match json.message_type {
-                MessageType::Initialise => {
-                    println!("Initialise handshake complete");
-                },
-                MessageType::MakeMutualPlaylist => {
-                    let access_tokens = match json.strings {
-                        Some(token) => token,
-                        None => {
-                            panic!("No access tokens were provided");
-                        },
-                    };
-                    match create_mutual_playlist(&access_tokens).await {
-                        Ok(()) => println!("Work complete"),
-                        Err(error) => println!("Couldn't create mutual playlist: {}", error),
-                    };
-                },
-                _ => {
-
-                },
-            };
-        });
-        return Ok(());
+    fn on_message(&mut self, message: Message) -> Result<()> {
+        tokio::spawn(handle_message(Arc::new(message)));
+        Ok(())
     }
 
     fn on_close(&mut self, code: CloseCode, reason: &str) {
@@ -83,7 +51,47 @@ impl Handler for Client {
     }
 }
 
-async fn create_mutual_playlist(access_tokens: &Vec<String>) -> Result<(), String> {
+async fn handle_message(message: Arc<Message>) -> Result<()> {
+    println!("Message Received");
+    let string = match message.as_text() {
+        Ok(string) => string,
+        Err(error) => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(MessageError{})),
+            details: Cow::Owned(format!("Couldn't convert message to string: {:?}", error)),
+        }),
+    };
+    let json: MessageFormat = match serde_json::from_str(string){
+        Ok(message) => message,
+        Err(error) => {
+            panic!("Couldn't convert string to InstructMessage struct: {:?}", error);
+        },
+    };
+    match json.message_type {
+        MessageType::Initialise => {
+            println!("Initialise handshake complete");
+        },
+        MessageType::MakeMutualPlaylist => {
+            let access_tokens = match json.strings {
+                Some(token) => token,
+                None => return Err(Error{
+                    kind: ErrorKind::Custom(Box::new(MessageError{})),
+                    details: Cow::Owned(format!("No access tokens were provided")),
+                }),
+            };
+            create_mutual_playlist(&access_tokens).await?;
+        },
+        _ => {
+            return Err(Error {
+                kind: ErrorKind::Custom(Box::new(MessageError{})),
+                details: Cow::Owned(format!("Unexpected Message Type: {:?}", json))
+            });
+        },
+    };
+    println!("Work Done");
+    Ok(())
+}
+
+async fn create_mutual_playlist(access_tokens: &Vec<String>) -> Result<()> {
     let first_user = Spotify::default()
         .access_token(&(access_tokens[0]))
         .build();

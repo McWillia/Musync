@@ -12,6 +12,7 @@ interface IProps {
 
 interface IState {
   playlist_data?: string,
+  username?: string,
   group_data: IGroup[],
   readyState: number
 }
@@ -26,7 +27,7 @@ export default class App extends Component<IProps, IState> {
         super(props);
         this.state = {
           group_data: [],
-          readyState: 0
+          readyState: 0,
         }
         this.code = props.location.search.slice(6);
         this.client = new WebSocket(wsAddr);
@@ -59,6 +60,10 @@ export default class App extends Component<IProps, IState> {
                     console.log(response.groups)
                     this.setState({group_data:response.groups})
                     break;
+                case 'Initialise':
+                    console.log(response.strings)
+                    this.setState({username: response.strings[0]})
+                    break;
                 default:
             }
         }
@@ -78,6 +83,9 @@ export default class App extends Component<IProps, IState> {
         if(this.state.readyState == 1){
             return(
                 <div>
+                    {this.state.username &&
+                        <h1>{this.state.username}</h1>
+                    }
                     <Playlist
                         playlist_data={this.state.playlist_data}
                         code={this.code}

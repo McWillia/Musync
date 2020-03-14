@@ -1,4 +1,4 @@
-use ws::{listen, Handler, Sender, Result as WSResult, Message, Handshake, CloseCode, Error as WSError, ErrorKind};
+use ws::{listen, Handler, Sender, Result, Message, Handshake, CloseCode, Error, ErrorKind};
 use std::{
     sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}},
     time::{Instant, Duration},
@@ -12,14 +12,14 @@ use musink::communication::*;
 use musink::spotify::*;
 
 #[derive(Clone, Copy)]
-pub enum ConnectionType {
+enum ConnectionType {
     Client,
     Service(ServiceType),
     Unknown,
 }
 
 #[derive(Debug, Clone)]
-pub struct Client {
+struct Client {
     group_id: usize,
     access_token: String,
     expires_at: Instant,
@@ -30,6 +30,7 @@ pub struct Client {
 #[derive(Clone)]
 struct LocalState {
     sender: Sender,
+    username: Arc<RwLock<Option<String>>>,
     connection_type: Arc<RwLock<ConnectionType>>,
 }
 
@@ -43,6 +44,7 @@ struct SharedState {
 
 struct Server {
     connection: Sender,
+    username: Arc<RwLock<Option<String>>>,
     connection_type: Arc<RwLock<ConnectionType>>,
     clients: Arc<DashMap<u32, Client>>,
     client_groups: Arc<DashMap<usize, ClientGroup>>,
@@ -52,25 +54,12 @@ struct Server {
 
 impl Handler for Server {
 
-    fn on_open(&mut self, _: Handshake) -> WSResult<()> {
+    fn on_open(&mut self, _: Handshake) -> Result<()> {
         println!("Got new connection: {:?}", self.connection);
-        let init = MessageFormat {
-            message_type: MessageType::Initialise,
-            id: Some(self.connection.connection_id() as usize),
-            strings: None,
-            groups: None,
-        };
-        let json = match serde_json::to_string(&init) {
-            Ok(json) => json,
-            Err(error) => {
-                println!("Couldn't convert json to string: {:?}", error);
-                return Ok(());
-            },
-        };
-        self.connection.send(json)
+        Ok(())
     }
 
-    fn on_message(&mut self, message: Message) -> WSResult<()> {
+    fn on_message(&mut self, message: Message) -> Result<()> {
         let shared_state = Arc::new(SharedState {
             clients: Arc::clone(&self.clients),
             client_groups: Arc::clone(&self.client_groups),
@@ -79,6 +68,7 @@ impl Handler for Server {
         });
         let local_state = Arc::new(LocalState {
             sender: self.connection.clone(),
+            username: Arc::clone(&self.username),
             connection_type: Arc::clone(&self.connection_type)
         });
         tokio::spawn(handle_message(shared_state, local_state, Arc::new(message)));
@@ -94,117 +84,77 @@ impl Handler for Server {
         };
         let local_state = LocalState {
             sender: self.connection.clone(),
+            username: Arc::clone(&self.username),
             connection_type: Arc::clone(&self.connection_type),
         };
         handle_close(&shared_state, &local_state, &code, &reason);
     }
 
-    fn on_error(&mut self, err: WSError) {
+    fn on_error(&mut self, err: Error) {
         println!("The server encountered an error: {:?}", err);
     }
 }
 
-async fn handle_message(shared_state: Arc<SharedState>, local_state: Arc<LocalState>, message: Arc<Message>) -> WSResult<()> {
+async fn handle_message(shared_state: Arc<SharedState>, local_state: Arc<LocalState>, message: Arc<Message>) -> Result<()> {
     let text = match message.as_text() {
         Ok(text) => text,
-        Err(error) => return Err(WSError {
-            kind: ErrorKind::Internal,
+        Err(error) => return Err(Error {
+            kind: ErrorKind::Custom(Box::new(MessageError{})),
             details: Cow::Owned(format!("Message wasn't in string format: {:?}", error))
         }),
     };
     println!("Message: {:?}", text);
     let json: MessageFormat = match serde_json::from_str(text){
         Ok(json) => json,
-        Err(error) => return Err(WSError {
-            kind: ErrorKind::Internal,
+        Err(error) => return Err(Error {
+            kind: ErrorKind::Custom(Box::new(MessageError{})),
             details: Cow::Owned(format!("Couldn't parse json: {:?}", error))
         }),
     };
     match json.message_type {
-        MessageType::NewClient => {
-            match handle_new_client(&shared_state, &local_state, &json).await {
-                Ok(()) => {
-                    *local_state.connection_type.write().unwrap() = ConnectionType::Client;
-                    return Ok(());
-                },
-                Err(error) => return Err(WSError {
-                    kind: ErrorKind::Internal,
-                    details: Cow::Owned(format!("Error handling play message: {:?}", error)),
-                })
-            }
-        },
-        MessageType::MakeMutualPlaylist => {
-            match handle_make_mutual_playlist(&shared_state, &local_state).await {
-                Ok(()) => return Ok(()),
-                Err(error) => return Err(WSError {
-                    kind: ErrorKind::Internal,
-                    details: Cow::Owned(format!("Error handling make mutual playlist message: {:?}", error)),
-                })
-            }
-        },
-        MessageType::JoinGroup => {
-            match handle_join_group(&shared_state, &local_state, &json) {
-                Ok(()) => return Ok(()),
-                Err(error) => return Err(WSError {
-                    kind: ErrorKind::Internal,
-                    details: Cow::Owned(format!("Error handling play message: {:?}", error)),
-                })
-            }
-        },
-        MessageType::NewService => {
-            match handle_new_service(&shared_state, &local_state, &json) {
+        MessageType::NewClient => handle_new_client(&shared_state, &local_state, &json).await?,
+        MessageType::MakeMutualPlaylist => handle_make_mutual_playlist(&shared_state, &local_state).await?,
+        MessageType::JoinGroup => handle_join_group(&shared_state, &local_state, &json)?,
+        MessageType::NewService => match handle_new_service(&shared_state, &local_state, &json) {
                 Ok(service_type) => {
                     println!("New Service");
                     *local_state.connection_type.write().unwrap() = ConnectionType::Service(service_type);
                     return Ok(())
                 },
-                Err(error) => return Err(WSError {
-                    kind: ErrorKind::Internal,
-                    details: Cow::Owned(format!("Error handling new service message: {:?}", error)),
-                }),
-            };
-        },
-        MessageType::Pause => {
-            match handle_pause(&shared_state, &local_state).await {
-                Ok(()) => return Ok(()),
-                Err(error) => return Err(WSError {
-                    kind: ErrorKind::Internal,
-                    details: Cow::Owned(format!("Error handling pause message: {:?}", error)),
-                })
-            }
-        },
-        MessageType::Play => {
-            match handle_play(&shared_state, &local_state).await {
-                Ok(()) => return Ok(()),
-                Err(error) => return Err(WSError {
-                    kind: ErrorKind::Internal,
-                    details: Cow::Owned(format!("Error handling play message: {:?}", error)),
-                })
-            }
-        },
+                Err(error) => return Err(error),
+            },
+        MessageType::Pause => handle_pause(&shared_state, &local_state).await?,
+        MessageType::Play => handle_play(&shared_state, &local_state).await?,
         MessageType::AdvertisingClientGroups => {
             return Ok(());
         },
         _ => {
-            return Err(WSError {
-                kind: ErrorKind::Internal,
+            return Err(Error {
+                kind: ErrorKind::Custom(Box::new(MessageError{})),
                 details: Cow::Owned(format!("Unexpected Message Type: {:?}", json))
             });
         },
     };
+    Ok(())
 }
 
-async fn handle_pause(shared_state: &SharedState, local_state: &LocalState) -> Result<(), String> {
+async fn handle_pause(shared_state: &SharedState, local_state: &LocalState) -> Result<()> {
     let group_id = match shared_state.clients.get(&local_state.sender.connection_id()) {
         Some(client) => client.group_id.to_owned(),
-        None => return Err(format!("Client {} doesn't exist in shared state", local_state.sender.connection_id())),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client {} doesn't exist in shared state", local_state.sender.connection_id())),
+        }),
     };
     let current_group = match shared_state.client_groups.get(&group_id) {
         Some(group) => group,
-        None => return Err(format!("Client group {} doesn't exist in shared state", group_id)),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client group {} doesn't exist in shared state", group_id)),
+        }),
     };
-    for client_id in current_group.clients.iter() {
-        check_refresh_client(&shared_state, &local_state).await.expect("Couldn't refresh access token");
+    for (client_id, _username) in current_group.clients.iter() {
+        check_refresh_client(&shared_state, &local_state).await?;
         match shared_state.clients.get(client_id) {
             Some(client) => pause(&client.access_token.to_owned()).await?,
             None => {
@@ -216,16 +166,22 @@ async fn handle_pause(shared_state: &SharedState, local_state: &LocalState) -> R
     Ok(())
 }
 
-async fn handle_play(shared_state: &SharedState, local_state: &LocalState) -> Result<(), String> {
+async fn handle_play(shared_state: &SharedState, local_state: &LocalState) -> Result<()> {
     let group_id = match shared_state.clients.get(&local_state.sender.connection_id()) {
         Some(client) => client.group_id.to_owned(),
-        None => return Err(format!("Client {} doesn't exist in shared state", local_state.sender.connection_id())),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client {} doesn't exist in shared state", local_state.sender.connection_id())),
+        }),
     };
     let current_group = match shared_state.client_groups.get(&group_id) {
         Some(group) => group,
-        None => return Err(format!("Client group {} doesn't exist in shared state", group_id)),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client group {} doesn't exist in shared state", group_id)),
+        }),
     };
-    for client_id in current_group.clients.iter() {
+    for (client_id, _username) in current_group.clients.iter() {
         check_refresh_client(&shared_state, &local_state).await.expect("Couldn't refresh access token");
         match shared_state.clients.get(client_id) {
             Some(client) => play(&client.access_token.to_owned()).await?,
@@ -238,21 +194,46 @@ async fn handle_play(shared_state: &SharedState, local_state: &LocalState) -> Re
     Ok(())
 }
 
-async fn handle_new_client(shared_state: &SharedState, local_state: &LocalState, json: &MessageFormat) -> Result<(), String> {
+async fn handle_new_client(shared_state: &SharedState, local_state: &LocalState, json: &MessageFormat) -> Result<()> {
     let auth_code = match &json.strings {
         Some(code) => &code[0],
-        None => return Err(format!("Client {} didn't specify an auth code", local_state.sender.connection_id())),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(MessageError{})),
+            details: Cow::Owned(format!("Client {} didn't specify an auth code", local_state.sender.connection_id())),
+        }),
     };
     let token = get_access_token(&auth_code).await?;
+    if let Some(username) = get_username(&token.access_token).await? {
+        local_state.username.write().unwrap().replace(username.to_owned());
+        let message = MessageFormat {
+            message_type: MessageType::Initialise,
+            id: None,
+            strings: Some(vec![username.to_owned()]),
+            groups: None,
+        };
+        let json = match serde_json::to_string(&message) {
+            Ok(json) => json,
+            Err(error) => return Err(Error{
+                kind: ErrorKind::Custom(Box::new(FunctionalityError{})),
+                details: Cow::Owned(format!("Couldn't convert initialise message to string: {:?}", error)),
+            }),
+        };
+        local_state.sender.send(json)?;
+    }
+    *local_state.connection_type.write().unwrap() = ConnectionType::Client;
     add_new_client(&shared_state, &local_state, &token)?;
     broadcast_client_groups(&shared_state)?;
+
     Ok(())
 }
 
-fn handle_new_service(shared_state: &SharedState, local_state: &LocalState, json: &MessageFormat) -> Result<ServiceType, String> {
+fn handle_new_service(shared_state: &SharedState, local_state: &LocalState, json: &MessageFormat) -> Result<ServiceType> {
     let service_type = match &json.strings {
         Some(string) => &string[0],
-        None => return Err("Service didn't specify its type".to_string()),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(MessageError{})),
+            details: Cow::Owned(format!("Connection {} didn't specify its service type", local_state.sender.connection_id())),
+        }),
     };
     match service_type.as_str() {
         "MutualPlaylist" => {
@@ -266,14 +247,20 @@ fn handle_new_service(shared_state: &SharedState, local_state: &LocalState, json
     };
 }
 
-fn handle_join_group(shared_state: &SharedState, local_state: &LocalState, json: &MessageFormat) -> Result<(), String> {
+fn handle_join_group(shared_state: &SharedState, local_state: &LocalState, json: &MessageFormat) -> Result<()> {
     let group_id = match json.id {
         Some(id) => id,
-        None => return Err("Client didn't specify a group to join".to_string()),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(MessageError{})),
+            details: Cow::Owned(format!("Client {} didn't specify a group to join", local_state.sender.connection_id())),
+        }),
     };
     let old_group_id = match shared_state.clients.get(&local_state.sender.connection_id()) {
         Some(client) => client.group_id.to_owned(),
-        None => return Err(format!("Client {} doesn't exist in the shared state", local_state.sender.connection_id())),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client {} doesn't exist in the shared state", local_state.sender.connection_id())),
+        }),
     };
     remove_client_from_group(&shared_state, &local_state, &old_group_id)?;
     add_client_to_group(&shared_state, &local_state, &group_id)?;
@@ -287,30 +274,33 @@ fn handle_join_group(shared_state: &SharedState, local_state: &LocalState, json:
     Ok(())
 }
 
-fn add_client_to_group(shared_state: &SharedState, local_state: &LocalState, group_id: &usize) -> Result<(), String> {
+fn add_client_to_group(shared_state: &SharedState, local_state: &LocalState, group_id: &usize) -> Result<()> {
     match shared_state.client_groups.get_mut(group_id) {
-        Some(mut existing_group) => existing_group.clients.push(local_state.sender.connection_id()),
+        Some(mut existing_group) => existing_group.clients.push((local_state.sender.connection_id(), local_state.username.read().unwrap().clone())),
         None => {
             shared_state.client_groups.insert(*group_id, ClientGroup {
                 group_id: *group_id,
                 is_advertising: false,
-                clients: vec![local_state.sender.connection_id()],
+                clients: vec![(local_state.sender.connection_id(), local_state.username.read().unwrap().clone())],
             });
         },
     };
     Ok(())
 }
 
-fn remove_client_from_group(shared_state: &SharedState, local_state: &LocalState, group_id: &usize) -> Result<(), String> {
+fn remove_client_from_group(shared_state: &SharedState, local_state: &LocalState, group_id: &usize) -> Result<()> {
     match shared_state.client_groups.remove_if(group_id, |_, group| {
-        group.clients.len() == 1 && group.clients[0] == local_state.sender.connection_id()
+        group.clients.len() == 1 && group.clients[0].0 == local_state.sender.connection_id()
     }) {
         Some(_result) => Ok(()),
         None => {
             let mut current_group = shared_state.client_groups.get_mut(group_id).unwrap();
-            let client_index_in_group = match current_group.clients.iter().position(|client_id| *client_id == local_state.sender.connection_id()) {
+            let client_index_in_group = match current_group.clients.iter().position(|(client_id, _username)| *client_id == local_state.sender.connection_id()) {
                 Some(index) => index,
-                None => return Err(format!("Client {} isn't in shared state", local_state.sender.connection_id())),
+                None => return Err(Error{
+                    kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+                    details: Cow::Owned(format!("Client {} isn't in the shared state", local_state.sender.connection_id())),
+                }),
             };
             current_group.clients.remove(client_index_in_group);
             Ok(())
@@ -318,7 +308,7 @@ fn remove_client_from_group(shared_state: &SharedState, local_state: &LocalState
     }
 }
 
-fn add_new_client(shared_state: &SharedState, local_state: &LocalState, token: &TokenInfo) -> Result<(), String> {
+fn add_new_client(shared_state: &SharedState, local_state: &LocalState, token: &TokenInfo) -> Result<()> {
     let new_group_id = shared_state.client_group_count.fetch_add(1, Ordering::Relaxed);
     let new_client = Client {
         group_id: new_group_id,
@@ -332,17 +322,20 @@ fn add_new_client(shared_state: &SharedState, local_state: &LocalState, token: &
     Ok(())
 }
 
-fn remove_client(shared_state: &SharedState, local_state: &LocalState) -> Result<(), String> {
+fn remove_client(shared_state: &SharedState, local_state: &LocalState) -> Result<()> {
     let group_id = match shared_state.clients.get(&local_state.sender.connection_id()) {
         Some(client) => client.group_id.to_owned(),
-        None => return Err(format!("Client {} doesn't exist in shared state", local_state.sender.connection_id())),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client {} doesn't exist in shared state", local_state.sender.connection_id())),
+        }),
     };
     remove_client_from_group(&shared_state, &local_state, &group_id)?;
     shared_state.clients.remove(&local_state.sender.connection_id());
     return Ok(())
 }
 
-fn broadcast_client_groups(shared_state: &SharedState) -> Result<(), String> {
+fn broadcast_client_groups(shared_state: &SharedState) -> Result<()> {
     let message = MessageFormat {
         message_type: MessageType::AdvertisingClientGroups,
         id: None,
@@ -351,34 +344,43 @@ fn broadcast_client_groups(shared_state: &SharedState) -> Result<(), String> {
     };
     let json = match serde_json::to_string(&message) {
         Ok(json) => json,
-        Err(error) => return Err(format!("Couldn't convert message to string: {:?}", error)),
+        Err(error) => return Err(Error {
+            kind: ErrorKind::Custom(Box::new(FunctionalityError{})),
+            details: Cow::Owned(format!("Couldn't convert client broadcast message to string: {:?}", error)),
+        }),
     };
     for client in shared_state.clients.iter() {
-        match client.sender.send(Message::Text(json.to_owned())) {
-            Ok(()) => {},
-            Err(error) => return Err(format!("Error sending message to client: {:?}", error)),
-        };
+        client.sender.send(Message::Text(json.to_owned()))?;
     };
     return Ok(());
 }
 
-async fn handle_make_mutual_playlist(shared_state: &SharedState, local_state: &LocalState) -> Result<(), String> {
+async fn handle_make_mutual_playlist(shared_state: &SharedState, local_state: &LocalState) -> Result<()> {
     check_refresh_client(&shared_state, &local_state).await.expect("Couldn't refresh access token");
     let group_id = match shared_state.clients.get(&local_state.sender.connection_id()) {
         Some(client) => client.group_id.to_owned(),
-        None => return Err(format!("Client {} isn't in shared state", &local_state.sender.connection_id())),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client {} isn't in shared state", local_state.sender.connection_id())),
+        }),
     };
     let current_group = match shared_state.client_groups.get(&group_id) {
         Some(group) => group,
-        None => return Err(format!("Client group {} doesn't exist ", group_id)),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client group {} isn't in shared state", group_id)),
+        }),
     };
     if current_group.clients.len() < 2 {
-        return Err("The current group has less than two members".to_string());
+        return Err(Error{
+            kind: ErrorKind::Custom(Box::new(FunctionalityError{})),
+            details: Cow::Owned(format!("Group {} has less than two members", group_id)),
+        });
     };
     let message = MessageFormat {
         message_type: MessageType::MakeMutualPlaylist,
         id: None,
-        strings: Some(current_group.clients.iter().filter_map(|client| match shared_state.clients.get(client) {
+        strings: Some(current_group.clients.iter().filter_map(|(client_id, _username)| match shared_state.clients.get(&client_id) {
             Some(client) => Some(client.access_token.to_owned()),
             None => None,
         }).collect()),
@@ -386,26 +388,31 @@ async fn handle_make_mutual_playlist(shared_state: &SharedState, local_state: &L
     };
     let json = match serde_json::to_string(&message) {
         Ok(json) => json,
-        Err(error) => return Err(format!("Couldn't convert message to string: {:?}", error)),
+        Err(error) => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(FunctionalityError{})),
+            details: Cow::Owned(format!("Couldn't convert make mutual playlist message to string: {:?}", error)),
+        }),
     };
     let mut mutual_playlist_group = shared_state.service_groups[0].write().unwrap();
     if mutual_playlist_group.len() == 0 {
-        return Err("There are no microservices prepared to perform this task".to_string());
+        return Err(Error{
+            kind: ErrorKind::Custom(Box::new(FunctionalityError{})),
+            details: Cow::Owned(format!("There are no mutual playlist microservices prepared")),
+        });
     };
-    match mutual_playlist_group[0].1.send(Message::Text(json)) {
-        Ok(()) => {},
-        Err(error) => {
-            return Err(format!("Error sending message to client: {:?}", error));
-        },
-    };
+    mutual_playlist_group[0].1.send(Message::Text(json))?;
     mutual_playlist_group.rotate_left(1);
     Ok(())
 }
 
-async fn check_refresh_client(shared_state: &SharedState, local_state: &LocalState) -> Result<(), String> {
+async fn check_refresh_client(shared_state: &SharedState, local_state: &LocalState) -> Result<()> {
     let expiry_time = match shared_state.clients.get(&local_state.sender.connection_id()) {
         Some(client) => client.expires_at.to_owned(),
-        None => return Err("Client isn't in shared state".to_string()),
+        None => return Err(Error{
+            kind: ErrorKind::Custom(Box::new(SharedStateError{})),
+            details: Cow::Owned(format!("Client {} isn't in shared state", local_state.sender.connection_id())),
+        }),
+        //return Err("Client isn't in shared state".to_string()),
     };
     if Instant::now() > expiry_time {
         let mut client = shared_state.clients.get_mut(&local_state.sender.connection_id()).unwrap();
@@ -419,7 +426,7 @@ async fn check_refresh_client(shared_state: &SharedState, local_state: &LocalSta
                 client.expires_at = Instant::now().checked_add(Duration::from_secs(token.expires_in as u64)).unwrap();
                 return Ok(());
             },
-            Err(error) => return Err(format!("Error refreshing token: {:?}", error)),
+            Err(error) => return Err(error),
         }
     }
     Ok(())
@@ -470,5 +477,5 @@ async fn main() {
     let client_groups = Arc::new(DashMap::new());
     let client_group_count = Arc::new(AtomicUsize::new(0));
     let service_groups = Arc::new([RwLock::new(Vec::new()), RwLock::new(Vec::new())]);
-    listen("192.168.1.69:8080", |connection| Server {connection: connection, connection_type: Arc::new(RwLock::new(ConnectionType::Unknown)), clients: Arc::clone(&clients), client_groups: Arc::clone(&client_groups), client_group_count: Arc::clone(&client_group_count), service_groups: Arc::clone(&service_groups)}).unwrap();
+    listen("192.168.1.69:8080", |connection| Server {connection: connection, username: Arc::new(RwLock::new(None)), connection_type: Arc::new(RwLock::new(ConnectionType::Unknown)), clients: Arc::clone(&clients), client_groups: Arc::clone(&client_groups), client_group_count: Arc::clone(&client_group_count), service_groups: Arc::clone(&service_groups)}).unwrap();
 }
